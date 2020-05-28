@@ -39,4 +39,36 @@ impl PageGraph {
             panic!("Supply a node with HtmlElement node type");
         }
     }
+
+    /// Get a collection of all Resource nodes whose requests were intiated by a given Script node or HtmlElement node with tag_name "script".
+    ///
+    /// For script nodes, associated resources are directly attached by a Request Start edge.
+    /// For script HTML element nodes, associated resources are either directly attached by a
+    /// Request Start edge (`src="..."`), or additionally by a Request Start edge on an attached
+    /// Script node.
+    pub fn resources_from_script(&self, node_id: NodeId) -> Vec<(NodeId, &Node)> {
+        let element = self.nodes.get(&node_id).unwrap();
+
+        let mut resulting_resources: Vec<NodeId> = self
+            .graph.neighbors_directed(node_id, Direction::Outgoing)
+            .filter(|neighbor_id| match self.nodes.get(&neighbor_id).unwrap().node_type { NodeType::Resource { .. } => true, _ => false })
+            .collect();
+
+        match element.node_type {
+            NodeType::Script { .. } => (),
+            NodeType::HtmlElement { ref tag_name, .. } if tag_name == "script" => {
+                let mut resources_from_executed_script: Vec<NodeId> = self
+                    .graph.neighbors_directed(node_id, Direction::Outgoing)
+                    .filter(|neighbor_id| match self.nodes.get(&neighbor_id).unwrap().node_type { NodeType::Script { .. } => true, _ => false })
+                    .map(|attached_script_id| self.graph.neighbors_directed(attached_script_id, Direction::Outgoing))
+                    .flatten()
+                    .filter(|attached_script_neighbor_id| match self.nodes.get(attached_script_neighbor_id).unwrap().node_type { NodeType::Resource { .. } => true, _ => false })
+                    .collect();
+                resulting_resources.append(&mut resources_from_executed_script);
+            },
+            _ => panic!("Supply a node with Script node type, or an HtmlElement node with tag_name \"script\""),
+        }
+
+        resulting_resources.into_iter().map(|node_id| (node_id, self.nodes.get(&node_id).unwrap())).collect()
+    }
 }
