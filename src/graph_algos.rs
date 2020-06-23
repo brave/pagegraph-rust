@@ -71,4 +71,91 @@ impl PageGraph {
 
         resulting_resources.into_iter().map(|node_id| (node_id, self.nodes.get(&node_id).unwrap())).collect()
     }
+
+    /// Get a collection of all Resource nodes whose requests match a given adblock filter pattern.
+    pub fn resources_matching_filter(&self, pattern: &str) -> Vec<(NodeId, &Node)> {
+        let root_urls = self.nodes
+            .iter()
+            .filter(|(node_id, node)| {
+                if let NodeType::DomRoot { .. } = node.node_type {
+                    self.graph.edges_directed(*node_id.to_owned(), Direction::Incoming).count() == 0
+                } else {
+                    false
+                }
+            })
+            .map(|(_, node)| {
+                match &node.node_type {
+                    NodeType::DomRoot { url: Some(url), .. } => url,
+                    _ => panic!("Could not find DOM root URL"),
+                }
+            }).collect::<Vec<_>>();
+        assert_eq!(root_urls.len(), 1);
+        let source_url = root_urls[0];
+
+        let source_url = url::Url::parse(source_url).expect("Could not parse source URL");
+        let source_hostname = source_url.host_str().expect(&format!("Source URL has no host, {:?}", source_url));
+        let source_domain = get_domain(source_hostname);
+
+        if let Ok(rule) = adblock::filters::network::NetworkFilter::parse(pattern, false) {
+            self.nodes
+                .iter()
+                .filter(|(id, node)| match &node.node_type {
+                    NodeType::Resource { url } => {
+                        use adblock::filters::network::NetworkMatchable as _;
+
+                        let request_url = match url::Url::parse(url) {
+                            Ok(request_url) => request_url,
+                            Err(_) => return false,
+                        };
+                        let request_url_scheme = request_url.scheme();
+                        let request_url_hostname = request_url.host_str().expect("Request URL has no host");
+                        let request_url_domain = get_domain(request_url_hostname);
+
+                        let request_start_edges = self.graph
+                            .edges_directed(*id.to_owned(), Direction::Incoming)
+                            .filter(|(_, _, edge_id)| match &self.edges.get(edge_id).unwrap().edge_type {
+                                EdgeType::RequestStart { .. } => true,
+                                _ => false,
+                            });
+                        let mut unique_request_types = request_start_edges.map(|(_, _, edge_id)|
+                                if let Some(Edge { edge_type: EdgeType::RequestStart { request_type, .. }, .. }) = self.edges.get(edge_id) {
+                                    request_type.to_owned()
+                                } else {
+                                    unreachable!()
+                                }
+                            ).collect::<std::collections::HashSet<_>>()
+                            .into_iter().collect::<Vec<_>>();
+                        if unique_request_types.len() == 0 {
+                            panic!("Resource did not have a corresponding RequestStart edge");
+                        } else if unique_request_types.len() > 1 {
+                            panic!("Resource was requested with multiple different request types: {:?}", unique_request_types);
+                        }
+                        let request_type = unique_request_types.remove(0);
+
+                        let request = adblock::request::Request::new(
+                            &request_type,
+                            url,
+                            request_url_scheme,
+                            request_url_hostname,
+                            &request_url_domain,
+                            source_hostname,
+                            &source_domain,
+                        );
+                        rule.matches(&request)
+                    }
+                    _ => false
+                })
+                .map(|(id, node)| (id.clone(), node))
+                .collect()
+        } else {
+            vec![]
+        }
+    }
+}
+
+fn get_domain(host: &str) -> String {
+    let source_hostname = host;
+    let source_domain = source_hostname.parse::<addr::DomainName>().expect("Source URL domain could not be parsed");
+    let source_domain = &source_hostname[source_hostname.len() - source_domain.root().to_str().len()..];
+    source_domain.to_string()
 }
