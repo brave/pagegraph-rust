@@ -151,6 +151,106 @@ impl PageGraph {
             vec![]
         }
     }
+
+    pub fn direct_downstream_effects_of(&self, node_id: &NodeId) -> Vec<(NodeId, &Node)>{
+        match &self.nodes.get(node_id).unwrap().node_type {
+            NodeType::Extensions {} => unimplemented!(),
+            NodeType::RemoteFrame { .. } => unimplemented!(),
+            NodeType::Resource { .. } => {
+                // script resources cause the execution of the corresponding script, which is connected
+                // through the corresponding HTML script element.
+                let attached_script_elements = self.graph.edges_directed(*node_id, Direction::Outgoing).filter_map(|(_n0, n1, edge_id)| match &self.edges.get(&edge_id).unwrap().edge_type {
+                    EdgeType::RequestComplete { .. } => Some(n1),
+                    _ => None,
+                }).filter(|target_node| match &self.nodes.get(target_node).unwrap().node_type {
+                    NodeType::HtmlElement { tag_name, .. } if tag_name == "script" => true,
+                    _ => false,
+                }).collect::<Vec<_>>();
+
+                attached_script_elements.into_iter()
+                    .map(|html_node_id| self.graph
+                        .neighbors_directed(html_node_id, Direction::Outgoing)
+                        .filter(|html_neighbor| match &self.nodes.get(html_neighbor).unwrap().node_type {
+                            NodeType::Script { .. } => true,
+                            _ => false,
+                        })
+                    ).flatten()
+                    .map(|script_node_id| (script_node_id, self.nodes.get(&script_node_id).unwrap()))
+                    .collect::<Vec<_>>()
+            }
+            NodeType::AdFilter { .. } => unimplemented!(),
+            NodeType::TrackerFilter => unimplemented!(),  // TODO
+            NodeType::FingerprintingFilter => unimplemented!(),   // TODO
+            NodeType::WebApi { .. } => unimplemented!(),
+            NodeType::JsBuiltin { .. } => unimplemented!(),
+            NodeType::HtmlElement { tag_name, .. } if tag_name == "script" => {
+                // script elements with a src attribute cause a resource request
+                let resource_requests = self.graph.neighbors_directed(*node_id, Direction::Outgoing).filter(|node_id| match &self.nodes.get(&node_id).unwrap().node_type {
+                    NodeType::Resource { .. } => true,
+                    _ => false,
+                }).map(|node_id| (node_id, self.nodes.get(&node_id).unwrap()))
+                .collect::<Vec<_>>();
+
+                // inline script elements cause a script execution
+                if resource_requests.is_empty() {
+                    self.graph.neighbors_directed(*node_id, Direction::Outgoing).filter(|node_id| match &self.nodes.get(&node_id).unwrap().node_type {
+                        NodeType::Script { .. } => true,
+                        _ => false,
+                    }).map(|node_id| (node_id, self.nodes.get(&node_id).unwrap()))
+                    .collect::<Vec<_>>()
+                } else {
+                    resource_requests
+                }
+            }
+            NodeType::HtmlElement { tag_name: _, .. } => unimplemented!(),
+            NodeType::TextNode { .. } => unimplemented!(),
+            NodeType::DomRoot { .. } => unimplemented!(),
+            NodeType::FrameOwner { .. } => unimplemented!(),
+            NodeType::Storage {} => unimplemented!(),
+            NodeType::LocalStorage {} => unimplemented!(),
+            NodeType::SessionStorage {} => unimplemented!(),
+            NodeType::CookieJar {} => unimplemented!(),
+            NodeType::Script { .. } => {
+                // scripts can fetch resources
+                let fetched_resources = self.graph.edges_directed(*node_id, Direction::Incoming).filter_map(|(n0, _n1, edge_id)| match &self.edges.get(&edge_id).unwrap().edge_type {
+                    EdgeType::RequestComplete { .. } => Some(n0),
+                    _ => None,
+                }).map(|node_id| (node_id, self.nodes.get(&node_id).unwrap()));
+
+                // scripts can execute other scripts
+                let executed_scripts = self.graph.neighbors_directed(*node_id, Direction::Outgoing).filter(|node_id| match &self.nodes.get(&node_id).unwrap().node_type {
+                    NodeType::Script { .. } => true,
+                    _ => false,
+                }).map(|node_id| (node_id, self.nodes.get(&node_id).unwrap()));
+
+                fetched_resources.chain(executed_scripts).collect::<Vec<_>>()
+                // TODO scripts can create/modify/insert DOM elements, execute web APIs and JS
+                // builtins, build 3rd party frames, access storage, access cookies...
+            }
+            NodeType::Parser {} => unimplemented!(),
+            NodeType::BraveShields {} => unimplemented!(),
+            NodeType::AdsShield {} => unimplemented!(),
+            NodeType::TrackersShield {} => unimplemented!(),
+            NodeType::JavascriptShield {} => unimplemented!(),
+            NodeType::FingerprintingShield {} => unimplemented!(),
+        }
+    }
+
+    pub fn all_downstream_effects_of(&self, node_id: &NodeId) -> Vec<(NodeId, &Node)>{
+        let mut nodes_to_check = vec![*node_id];
+        let mut already_checked = vec![];
+
+        while let Some(node_id) = nodes_to_check.pop() {
+            let direct_effects = self.direct_downstream_effects_of(&node_id);
+            already_checked.push(node_id);
+
+            direct_effects.into_iter().for_each(|(node_id, _)| if !already_checked.contains(&node_id) {
+                nodes_to_check.push(node_id);
+            });
+        }
+
+        already_checked.into_iter().map(|node_id| (node_id, self.nodes.get(&node_id).unwrap())).collect()
+    }
 }
 
 fn get_domain(host: &str) -> String {
