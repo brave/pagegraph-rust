@@ -72,8 +72,8 @@ impl PageGraph {
         resulting_resources.into_iter().map(|node_id| (node_id, self.nodes.get(&node_id).unwrap())).collect()
     }
 
-    /// Get a collection of all Resource nodes whose requests match a given adblock filter pattern.
-    pub fn resources_matching_filter(&self, pattern: &str) -> Vec<(NodeId, &Node)> {
+    /// Gets the URL of the page the graph was recorded from
+    pub fn root_url(&self) -> String {
         let root_urls = self.nodes
             .iter()
             .filter(|(node_id, node)| {
@@ -90,9 +90,14 @@ impl PageGraph {
                 }
             }).collect::<Vec<_>>();
         assert_eq!(root_urls.len(), 1);
-        let source_url = root_urls[0];
+        return root_urls[0].to_string();
+    }
 
-        let source_url = url::Url::parse(source_url).expect("Could not parse source URL");
+    /// Get a collection of all Resource nodes whose requests match a given adblock filter pattern.
+    pub fn resources_matching_filter(&self, pattern: &str) -> Vec<(NodeId, &Node)> {
+        let source_url = self.root_url();
+
+        let source_url = url::Url::parse(&source_url).expect("Could not parse source URL");
         let source_hostname = source_url.host_str().expect(&format!("Source URL has no host, {:?}", source_url));
         let source_domain = get_domain(source_hostname);
 
