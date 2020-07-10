@@ -40,6 +40,23 @@ impl PageGraph {
         }
     }
 
+    /// Get a collection of any Script nodes responsible for fetching the given Resource node.
+    pub fn scripts_that_caused_resource(&self, node_id: NodeId) -> Vec<(NodeId, &Node)> {
+        let element = self.nodes.get(&node_id).unwrap();
+
+        if let NodeType::Resource { url: ref _url } = element.node_type {
+            let incoming: Vec<_> = self.graph.neighbors_directed(node_id, Direction::Incoming).map(|node| {
+                (node, self.nodes.get(&node).unwrap())
+            }).filter(|(_id, _node)| {
+                true
+            }).collect();
+
+            incoming
+        } else {
+            panic!("Supply a node with Resource node type");
+        }
+    }
+
     /// Get a collection of all Resource nodes whose requests were intiated by a given Script node or HtmlElement node with tag_name "script".
     ///
     /// For script nodes, associated resources are directly attached by a Request Start edge.
@@ -89,8 +106,34 @@ impl PageGraph {
                     _ => panic!("Could not find DOM root URL"),
                 }
             }).collect::<Vec<_>>();
-        assert_eq!(root_urls.len(), 1);
+        assert_eq!(root_urls.len(), 1, "Could not determine root URL");
         return root_urls[0].to_string();
+    }
+
+    pub fn resource_request_types(&self, resource_node: &NodeId) -> Vec<String> {
+        if let NodeType::Resource { .. } = self.nodes.get(resource_node).unwrap().node_type {
+            let request_start_edges = self.graph
+                .edges_directed(resource_node.to_owned(), Direction::Incoming)
+                .filter(|(_, _, edge_id)| match &self.edges.get(edge_id).unwrap().edge_type {
+                    EdgeType::RequestStart { .. } => true,
+                    _ => false,
+                });
+            let unique_request_types = request_start_edges.map(|(_, _, edge_id)|
+                    if let Some(Edge { edge_type: EdgeType::RequestStart { request_type, .. }, .. }) = self.edges.get(edge_id) {
+                        request_type.as_str().to_owned()
+                    } else {
+                        unreachable!()
+                    }
+                ).collect::<std::collections::HashSet<_>>()
+                .into_iter().collect::<Vec<_>>();
+            if unique_request_types.len() == 0 {
+                return vec!["other".to_string()]
+            }
+
+            unique_request_types
+        } else {
+            panic!("resource_request_type must be supplied a node of type Resource");
+        }
     }
 
     /// Get a collection of all Resource nodes whose requests match a given adblock filter pattern.
@@ -116,37 +159,17 @@ impl PageGraph {
                         let request_url_hostname = request_url.host_str().expect("Request URL has no host");
                         let request_url_domain = get_domain(request_url_hostname);
 
-                        let request_start_edges = self.graph
-                            .edges_directed(*id.to_owned(), Direction::Incoming)
-                            .filter(|(_, _, edge_id)| match &self.edges.get(edge_id).unwrap().edge_type {
-                                EdgeType::RequestStart { .. } => true,
-                                _ => false,
-                            });
-                        let mut unique_request_types = request_start_edges.map(|(_, _, edge_id)|
-                                if let Some(Edge { edge_type: EdgeType::RequestStart { request_type, .. }, .. }) = self.edges.get(edge_id) {
-                                    request_type.to_owned()
-                                } else {
-                                    unreachable!()
-                                }
-                            ).collect::<std::collections::HashSet<_>>()
-                            .into_iter().collect::<Vec<_>>();
-                        if unique_request_types.len() == 0 {
-                            panic!("Resource did not have a corresponding RequestStart edge");
-                        } else if unique_request_types.len() > 1 {
-                            panic!("Resource was requested with multiple different request types: {:?}", unique_request_types);
-                        }
-                        let request_type = unique_request_types.remove(0);
+                        let request_types = self.resource_request_types(id);
 
-                        let request = adblock::request::Request::new(
-                            &request_type,
+                        request_types.iter().map(|request_type| rule.matches(&adblock::request::Request::new(
+                            request_type,
                             url,
                             request_url_scheme,
                             request_url_hostname,
                             &request_url_domain,
                             source_hostname,
                             &source_domain,
-                        );
-                        rule.matches(&request)
+                        ))).any(|matched| matched)
                     }
                     _ => false
                 })
@@ -258,7 +281,7 @@ impl PageGraph {
     }
 }
 
-fn get_domain(host: &str) -> String {
+pub fn get_domain(host: &str) -> String {
     let source_hostname = host;
     let source_domain = source_hostname.parse::<addr::DomainName>().expect("Source URL domain could not be parsed");
     let source_domain = &source_hostname[source_hostname.len() - source_domain.root().to_str().len()..];

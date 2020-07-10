@@ -47,6 +47,40 @@ pub enum NodeType {
     FingerprintingShield {},
 }
 
+#[derive(Clone, PartialEq, Debug)]
+pub enum RequestType {
+    Image,
+    ScriptClassic,
+    CSS,
+    AJAX,
+    Unknown,
+}
+
+impl From<&str> for RequestType {
+    fn from(v: &str) -> Self {
+        match v {
+            "Image" => Self::Image,
+            "ScriptClassic" => Self::ScriptClassic,
+            "CSS" => Self::CSS,
+            "AJAX" => Self::AJAX,
+            "Unknown" => Self::Unknown,
+            _ => Self::Unknown,
+        }
+    }
+}
+
+impl RequestType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Image => "image",
+            Self::ScriptClassic => "script",
+            Self::CSS => "stylesheet",
+            Self::AJAX => "xhr",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
 /// Represents the type of any PageGraph edge, along with any associated type-specific data.
 #[derive(Clone, PartialEq, Debug)]
 pub enum EdgeType {
@@ -78,7 +112,7 @@ pub enum EdgeType {
         value: String,
     },
     RequestStart {
-        request_type: String,
+        request_type: RequestType,
         status: String,
         request_id: usize,
     },
@@ -107,7 +141,7 @@ pub enum EdgeType {
     },
     DeleteStorage { key: String },
     ReadStorageCall { key: String },
-    ClearStorage, // TODO
+    ClearStorage { key: String },
     StorageBucket {},
     ExecuteFromAttribute { attr_name: String },
     Execute {},
