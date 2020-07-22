@@ -23,14 +23,18 @@ impl PageGraph {
 
         if let NodeType::HtmlElement { node_id: _html_node_id, .. } = element.node_type {
             let mut modifications: Vec<_> = self.graph.neighbors_directed(node_id, Direction::Incoming).map(|node| {
-                let edge_id = self.graph.edge_weight(node, node_id).unwrap();
-                (edge_id, self.edges.get(edge_id).unwrap())
-            }).filter(|(_id, edge)| {
-                match edge.edge_type {
-                    EdgeType::Structure { .. } => false,
-                    _ => true,
-                }
-            }).collect();
+                    let edge_ids = self.graph.edge_weight(node, node_id).unwrap();
+                    edge_ids
+                })
+                .flatten()
+                .map(|edge_id| (edge_id, self.edges.get(edge_id).unwrap()))
+                .filter(|(_id, edge)| {
+                    match edge.edge_type {
+                        EdgeType::Structure { .. } => false,
+                        _ => true,
+                    }
+                })
+                .collect();
 
             modifications.sort_by_key(|(_, edge)| edge.edge_timestamp.expect("HTML element modification had no timestamp"));
 
@@ -114,11 +118,13 @@ impl PageGraph {
         if let NodeType::Resource { .. } = self.nodes.get(resource_node).unwrap().node_type {
             let request_start_edges = self.graph
                 .edges_directed(resource_node.to_owned(), Direction::Incoming)
-                .filter(|(_, _, edge_id)| match &self.edges.get(edge_id).unwrap().edge_type {
+                .map(|(_, _, edge_ids)| edge_ids)
+                .flatten()
+                .filter(|edge_id| match &self.edges.get(edge_id).unwrap().edge_type {
                     EdgeType::RequestStart { .. } => true,
                     _ => false,
                 });
-            let unique_request_types = request_start_edges.map(|(_, _, edge_id)|
+            let unique_request_types = request_start_edges.map(|edge_id|
                     if let Some(Edge { edge_type: EdgeType::RequestStart { request_type, .. }, .. }) = self.edges.get(edge_id) {
                         request_type.as_str().to_owned()
                     } else {
@@ -187,13 +193,17 @@ impl PageGraph {
             NodeType::Resource { .. } => {
                 // script resources cause the execution of the corresponding script, which is connected
                 // through the corresponding HTML script element.
-                let attached_script_elements = self.graph.edges_directed(*node_id, Direction::Outgoing).filter_map(|(_n0, n1, edge_id)| match &self.edges.get(&edge_id).unwrap().edge_type {
-                    EdgeType::RequestComplete { .. } => Some(n1),
-                    _ => None,
-                }).filter(|target_node| match &self.nodes.get(target_node).unwrap().node_type {
-                    NodeType::HtmlElement { tag_name, .. } if tag_name == "script" => true,
-                    _ => false,
-                }).collect::<Vec<_>>();
+                let attached_script_elements = self.graph.edges_directed(*node_id, Direction::Outgoing)
+                    .map(|(_n0, n1, edge_ids)| edge_ids.iter().map(move |edge_id| match &self.edges.get(&edge_id).unwrap().edge_type {
+                        EdgeType::RequestComplete { .. } => Some(n1),
+                        _ => None,
+                    }))
+                    .flatten()
+                    .filter_map(|v| v)
+                    .filter(|target_node| match &self.nodes.get(target_node).unwrap().node_type {
+                        NodeType::HtmlElement { tag_name, .. } if tag_name == "script" => true,
+                        _ => false,
+                    }).collect::<Vec<_>>();
 
                 attached_script_elements.into_iter()
                     .map(|html_node_id| self.graph
@@ -240,10 +250,13 @@ impl PageGraph {
             NodeType::CookieJar {} => unimplemented!(),
             NodeType::Script { .. } => {
                 // scripts can fetch resources
-                let fetched_resources = self.graph.edges_directed(*node_id, Direction::Incoming).filter_map(|(n0, _n1, edge_id)| match &self.edges.get(&edge_id).unwrap().edge_type {
-                    EdgeType::RequestComplete { .. } => Some(n0),
-                    _ => None,
-                }).map(|node_id| (node_id, self.nodes.get(&node_id).unwrap()));
+                let fetched_resources = self.graph.edges_directed(*node_id, Direction::Incoming).map(|(n0, _n1, edge_ids)| edge_ids.iter().map(move |edge_id| match &self.edges.get(&edge_id).unwrap().edge_type {
+                        EdgeType::RequestComplete { .. } => Some(n0),
+                        _ => None,
+                    }))
+                    .flatten()
+                    .filter_map(|v| v)
+                    .map(|node_id| (node_id, self.nodes.get(&node_id).unwrap()));
 
                 // scripts can execute other scripts
                 let executed_scripts = self.graph.neighbors_directed(*node_id, Direction::Outgoing).filter(|node_id| match &self.nodes.get(&node_id).unwrap().node_type {

@@ -9,7 +9,7 @@ use crate::types::{ NodeType, EdgeType };
 pub struct PageGraph {
     pub edges: HashMap<EdgeId, Edge>,
     pub nodes: HashMap<NodeId, Node>,
-    pub graph: DiGraphMap<NodeId, EdgeId>,
+    pub graph: DiGraphMap<NodeId, Vec<EdgeId>>,
 }
 
 /// An identifier used to reference a node.
