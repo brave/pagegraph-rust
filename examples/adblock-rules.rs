@@ -12,9 +12,11 @@ fn main() {
 
     let matching_elements = graph.resources_matching_filter(&filter_rule);
 
-    matching_elements.iter().for_each(|(_id, matching_element)| {
-        if let NodeType::Resource { url, .. } = &matching_element.node_type {
-            println!("Matched {}", url);
-        }
-    });
+    matching_elements
+        .iter()
+        .for_each(|(_id, matching_element)| {
+            if let NodeType::Resource { url, .. } = &matching_element.node_type {
+                println!("Matched {}", url);
+            }
+        });
 }

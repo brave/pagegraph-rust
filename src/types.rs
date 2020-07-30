@@ -1,14 +1,26 @@
+use std::fmt;
+
 /// Represents the type of any PageGraph node, along with any associated type-specific data.
 #[derive(Clone, PartialEq, Debug)]
 pub enum NodeType {
     Extensions {},
-    RemoteFrame { url: String },
-    Resource { url: String },
-    AdFilter { rule: String },
-    TrackerFilter,  // TODO
-    FingerprintingFilter,   // TODO
-    WebApi { method: String },
-    JsBuiltin { method: String },
+    RemoteFrame {
+        url: String,
+    },
+    Resource {
+        url: String,
+    },
+    AdFilter {
+        rule: String,
+    },
+    TrackerFilter,        // TODO
+    FingerprintingFilter, // TODO
+    WebApi {
+        method: String,
+    },
+    JsBuiltin {
+        method: String,
+    },
     HtmlElement {
         tag_name: String,
         is_deleted: bool,
@@ -47,6 +59,16 @@ pub enum NodeType {
     FingerprintingShield {},
 }
 
+impl fmt::Display for NodeType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.NodeType {
+          HtmlElement => {
+            // write!(f, "(HtmlElement: <{}, {})", self.x, self.y)
+          }
+        }
+    }
+}
+
 /// Represents the type of any PageGraph edge, along with any associated type-specific data.
 #[derive(Clone, PartialEq, Debug)]
 pub enum EdgeType {
@@ -63,8 +85,12 @@ pub enum EdgeType {
         before: Option<usize>,
     },
     CreateNode {},
-    JsResult { value: Option<String> },
-    JsCall { args: Option<String> },
+    JsResult {
+        value: Option<String>,
+    },
+    JsCall {
+        args: Option<String>,
+    },
     RequestComplete {
         resource_type: String,
         status: String,
@@ -105,11 +131,17 @@ pub enum EdgeType {
         key: String,
         value: Option<String>,
     },
-    DeleteStorage { key: String },
-    ReadStorageCall { key: String },
+    DeleteStorage {
+        key: String,
+    },
+    ReadStorageCall {
+        key: String,
+    },
     ClearStorage, // TODO
     StorageBucket {},
-    ExecuteFromAttribute { attr_name: String },
+    ExecuteFromAttribute {
+        attr_name: String,
+    },
     Execute {},
     SetAttribute {
         key: String,

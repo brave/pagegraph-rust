@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use petgraph::graphmap::DiGraphMap;
 
-use crate::types::{ NodeType, EdgeType };
+use crate::types::{EdgeType, NodeType};
 
 /// The main PageGraph data structure.
 #[derive(Debug)]

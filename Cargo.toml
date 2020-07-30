@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["Anton Lazarev <alazarev@brave.com>"]
 edition = "2018"
 readme = "README.md"
+default-run = "cli"
 
 [dependencies]
 xml-rs = "^ 0.8"
@@ -11,3 +12,4 @@ petgraph = {git = "https://github.com/antonok-edm/petgraph", rev = "edges-undire
 adblock = "^ 0.2"
 url = "^ 2.1"
 addr = "^ 0.2"
+clap = "^ 2.33"
