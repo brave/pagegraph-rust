@@ -11,6 +11,7 @@ petgraph = {git = "https://github.com/antonok-edm/petgraph", rev = "edges-undire
 adblock = "^ 0.2"
 url = "^ 2.1"
 addr = "^ 0.2"
+rayon = "^ 1.4"
 
 [dev-dependencies]
 reqwest = "^ 0.9"
