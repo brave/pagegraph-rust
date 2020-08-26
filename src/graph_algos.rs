@@ -274,6 +274,7 @@ impl PageGraph {
             NodeType::TrackersShield {} => unimplemented!(),
             NodeType::JavascriptShield {} => unimplemented!(),
             NodeType::FingerprintingShield {} => unimplemented!(),
+            NodeType::FingerprintingV2Shield {} => unimplemented!(),
         }
     }
 

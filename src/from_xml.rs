@@ -1,12 +1,12 @@
-use std::fs::File;
-use std::io::BufReader;
 use std::collections::HashMap;
 use std::convert::TryFrom;
+use std::fs::File;
+use std::io::BufReader;
 
-use xml::reader::{ EventReader, XmlEvent };
 use petgraph::graphmap::DiGraphMap;
+use xml::reader::{EventReader, XmlEvent};
 
-use crate::{ graph, types };
+use crate::{graph, types};
 
 /// Reads a PageGraph from a GraphML-formatted file.
 pub fn read_from_file(file: &str) -> graph::PageGraph {
@@ -34,26 +34,40 @@ fn parse_xml_document<R: std::io::Read>(parser: &mut EventReader<R>) -> graph::P
     }
 }
 
+fn ignore_desc<R: std::io::Read>(parser: &mut EventReader<R>) {
+    while let Ok(e) = parser.next() {
+        match e {
+            XmlEvent::EndElement { name } if name.local_name == "desc" => return,
+            _ => {}
+        }
+    }
+}
+
 fn parse_graphml<R: std::io::Read>(parser: &mut EventReader<R>) -> graph::PageGraph {
     let mut node_items = HashMap::new();
     let mut edge_items = HashMap::new();
     while let Ok(e) = parser.next() {
         match e {
-            XmlEvent::StartElement { name, attributes, namespace: _ } => {
-                match &name.local_name[..] {
-                    "key" => {
-                        let (for_type, id, key) = build_key(parser, attributes);
-                        match for_type {
-                            KeyItemFor::Node => node_items.insert(id, key),
-                            KeyItemFor::Edge => edge_items.insert(id, key),
-                        };
-                    }
-                    "graph" => {
-                        break;
-                    }
-                    _ => println!("Unhandled local name: {}", name.local_name),
+            XmlEvent::StartElement {
+                name,
+                attributes,
+                namespace: _,
+            } => match &name.local_name[..] {
+                "key" => {
+                    let (for_type, id, key) = build_key(parser, attributes);
+                    match for_type {
+                        KeyItemFor::Node => node_items.insert(id, key),
+                        KeyItemFor::Edge => edge_items.insert(id, key),
+                    };
                 }
-            }
+                "graph" => {
+                    break;
+                }
+                "desc" => {
+                    ignore_desc(parser);
+                }
+                _ => println!("Unhandled local name: {}", name.local_name),
+            },
             XmlEvent::EndElement { name } => {
                 if name.local_name == "graphml" {
                     panic!("graphml ended without graph definition");
@@ -62,33 +76,38 @@ fn parse_graphml<R: std::io::Read>(parser: &mut EventReader<R>) -> graph::PageGr
                 }
             }
             XmlEvent::Whitespace(_) => (),
-            o => {panic!("unexpected {:?} in `graphml`", o)}
+            o => panic!("unexpected {:?} in `graphml`", o),
         }
     }
 
-    let key = KeyModel { node_items, edge_items };
+    let key = KeyModel {
+        node_items,
+        edge_items,
+    };
     let graph = Some(build_graph(parser, &key));
 
     while let Ok(e) = parser.next() {
         match e {
-            XmlEvent::StartElement { name, attributes: _, namespace: _ } => {
-                match &name.local_name[..] {
-                    "key" => {
-                        panic!("key item located after graph");
-                    }
-                    "graph" => {
-                        panic!("more than one graph item not supported");
-                    }
-                    _ => println!("Unhandled local name: {}", name.local_name),
+            XmlEvent::StartElement {
+                name,
+                attributes: _,
+                namespace: _,
+            } => match &name.local_name[..] {
+                "key" => {
+                    panic!("key item located after graph");
                 }
-            }
+                "graph" => {
+                    panic!("more than one graph item not supported");
+                }
+                _ => println!("Unhandled local name: {}", name.local_name),
+            },
             XmlEvent::EndElement { name } => {
                 if name.local_name == "graphml" {
-                    break
+                    break;
                 }
             }
             XmlEvent::Whitespace(_) => (),
-            o => {panic!("Unexpected {:?} in `graphml`", o)}
+            o => panic!("Unexpected {:?} in `graphml`", o),
         }
     }
 
@@ -117,14 +136,14 @@ impl TryFrom<&str> for KeyItemFor {
         match v {
             "node" => Ok(Self::Node),
             "edge" => Ok(Self::Edge),
-            _ => Err(())
+            _ => Err(()),
         }
     }
 }
 
 fn build_key<R: std::io::Read>(
     parser: &mut EventReader<R>,
-    attributes: Vec<xml::attribute::OwnedAttribute>
+    attributes: Vec<xml::attribute::OwnedAttribute>,
 ) -> (KeyItemFor, String, KeyItem) {
     let mut id = None;
     let mut for_type = None;
@@ -188,14 +207,14 @@ fn build_graph<R: std::io::Read>(parser: &mut EventReader<R>, key: &KeyModel) ->
                     }
                     _ => println!("Unhandled local name in {}: {}", STR_REP, name.local_name),
                 }
-            }
+            },
             XmlEvent::EndElement { name } => {
                 if name.local_name == STR_REP {
-                    break
+                    break;
                 }
             }
             XmlEvent::Whitespace(_) => (),
-            o => {panic!("Unexpected {:?} in `{}`", o, STR_REP)}
+            o => panic!("Unexpected {:?} in `{}`", o, STR_REP),
         }
     }
 
@@ -209,7 +228,7 @@ fn build_graph<R: std::io::Read>(parser: &mut EventReader<R>, key: &KeyModel) ->
 fn build_edge<R: std::io::Read>(
     parser: &mut EventReader<R>,
     attributes: Vec<xml::attribute::OwnedAttribute>,
-    key: &HashMap<String, KeyItem>
+    key: &HashMap<String, KeyItem>,
 ) -> (graph::EdgeId, graph::Edge, (graph::NodeId, graph::NodeId)) {
     const STR_REP: &'static str = "edge";
 
@@ -222,31 +241,47 @@ fn build_edge<R: std::io::Read>(
     for attribute in attributes {
         let name = attribute.name.local_name;
         match &name[..] {
-            "id" => id_value = Some(attribute.value
-                    .trim_start_matches('e')
-                    .parse::<usize>()
-                    .expect("Parse edge id as usize")
-                    .into()
-                ),
-            "source" => source_value = Some(attribute.value
-                    .trim_start_matches('n')
-                    .parse::<usize>()
-                    .expect("Parse source node id as usize")
-                    .into()
-                ),
-            "target" => target_value = Some(attribute.value
-                    .trim_start_matches('n')
-                    .parse::<usize>()
-                    .expect("Parse target node id as usize")
-                    .into()
-                ),
+            "id" => {
+                id_value = Some(
+                    attribute
+                        .value
+                        .trim_start_matches('e')
+                        .parse::<usize>()
+                        .expect("Parse edge id as usize")
+                        .into(),
+                )
+            }
+            "source" => {
+                source_value = Some(
+                    attribute
+                        .value
+                        .trim_start_matches('n')
+                        .parse::<usize>()
+                        .expect("Parse source node id as usize")
+                        .into(),
+                )
+            }
+            "target" => {
+                target_value = Some(
+                    attribute
+                        .value
+                        .trim_start_matches('n')
+                        .parse::<usize>()
+                        .expect("Parse target node id as usize")
+                        .into(),
+                )
+            }
             _ => panic!("Unexpected attribute in {}: {}", STR_REP, name),
         }
     }
 
     while let Ok(e) = parser.next() {
         match e {
-            XmlEvent::StartElement { name, attributes, namespace: _ } => {
+            XmlEvent::StartElement {
+                name,
+                attributes,
+                namespace: _,
+            } => {
                 match &name.local_name[..] {
                     DataItem::STR_REP => {
                         let data_item = DataItem::build_data(parser, attributes);
@@ -254,18 +289,23 @@ fn build_edge<R: std::io::Read>(
                         if key.get("edge type").unwrap().id == data_item.key {
                             edge_type = Some(contained.to_string());
                         } else if key.get("id").unwrap().id == data_item.key {
-                            let edge_id: graph::EdgeId = contained.parse::<usize>()
+                            let edge_id: graph::EdgeId = contained
+                                .parse::<usize>()
                                 .expect("parse edge id as usize")
                                 .into();
                             if edge_id != id_value.unwrap() {
                                 panic!("wrong edge id");
                             }
                         } else if key.get("timestamp").unwrap().id == data_item.key {
-                            edge_timestamp = Some(contained
-                                .trim_end_matches("0")
-                                .trim_end_matches(".")
-                                .parse::<isize>()
-                                .expect(&format!("parse edge timestamp as isize: {}", contained))
+                            edge_timestamp = Some(
+                                contained
+                                    .trim_end_matches(".0")
+                                    //.trim_end_matches(".")
+                                    .parse::<isize>()
+                                    .expect(&format!(
+                                        "parse edge timestamp as isize: {}",
+                                        contained
+                                    )),
                             );
                         } else {
                             data.insert(data_item.key, contained);
@@ -276,18 +316,25 @@ fn build_edge<R: std::io::Read>(
             }
             XmlEvent::EndElement { name } => {
                 if name.local_name == STR_REP {
-                    break
+                    break;
                 }
             }
             XmlEvent::Whitespace(_) => (),
-            o => {panic!("Unexpected {:?} in `{}`", o, STR_REP)}
+            o => panic!("Unexpected {:?} in `{}`", o, STR_REP),
         }
     }
 
-    let edge_type_attr = &edge_type.as_ref().expect("couldn't find `edge type` attr on node")[..];
+    let edge_type_attr = &edge_type
+        .as_ref()
+        .expect("couldn't find `edge type` attr on node")[..];
 
     let edge_type = types::EdgeType::construct(edge_type_attr, &mut data, key);
-    assert!(data.is_empty(), "extra data on node {:?}: {:?}", edge_type, data);
+    assert!(
+        data.is_empty(),
+        "extra data on node {:?}: {:?}",
+        edge_type,
+        data
+    );
 
     let id = id_value.expect("couldn't find `id` value on edge");
     let source = source_value.expect("couldn't find `source` value on edge");
@@ -304,7 +351,7 @@ fn build_edge<R: std::io::Read>(
 fn build_node<R: std::io::Read>(
     parser: &mut EventReader<R>,
     attributes: Vec<xml::attribute::OwnedAttribute>,
-    key: &HashMap<String, KeyItem>
+    key: &HashMap<String, KeyItem>,
 ) -> (graph::NodeId, graph::Node) {
     const STR_REP: &'static str = "node";
 
@@ -315,19 +362,27 @@ fn build_node<R: std::io::Read>(
     for attribute in attributes {
         let name = attribute.name.local_name;
         match &name[..] {
-            "id" => id_value = Some(attribute.value
-                    .trim_start_matches('n')
-                    .parse::<usize>()
-                    .expect("Parse node id as usize")
-                    .into()
-                ),
+            "id" => {
+                id_value = Some(
+                    attribute
+                        .value
+                        .trim_start_matches('n')
+                        .parse::<usize>()
+                        .expect("Parse node id as usize")
+                        .into(),
+                )
+            }
             _ => panic!("Unexpected attribute in {}: {}", STR_REP, name),
         }
     }
 
     while let Ok(e) = parser.next() {
         match e {
-            XmlEvent::StartElement { name, attributes, namespace: _ } => {
+            XmlEvent::StartElement {
+                name,
+                attributes,
+                namespace: _,
+            } => {
                 match &name.local_name[..] {
                     DataItem::STR_REP => {
                         let data_item = DataItem::build_data(parser, attributes);
@@ -335,18 +390,23 @@ fn build_node<R: std::io::Read>(
                         if key.get("node type").unwrap().id == data_item.key {
                             node_type = Some(contained.to_string());
                         } else if key.get("id").unwrap().id == data_item.key {
-                            let node_id: graph::NodeId = contained.parse::<usize>()
+                            let node_id: graph::NodeId = contained
+                                .parse::<usize>()
                                 .expect("parse node id as usize")
                                 .into();
                             if node_id != id_value.unwrap() {
                                 panic!("wrong node id");
                             }
                         } else if key.get("timestamp").unwrap().id == data_item.key {
-                            node_timestamp = Some(contained
-                                .trim_end_matches("0")
-                                .trim_end_matches(".")
-                                .parse::<isize>()
-                                .expect(&format!("parse node timestamp as isize: {}", contained))
+                            node_timestamp = Some(
+                                contained
+                                    .trim_end_matches(".0")
+                                    //.trim_end_matches(".")
+                                    .parse::<isize>()
+                                    .expect(&format!(
+                                        "parse node timestamp as isize: {}",
+                                        contained
+                                    )),
                             );
                         } else {
                             data.insert(data_item.key, contained);
@@ -357,18 +417,25 @@ fn build_node<R: std::io::Read>(
             }
             XmlEvent::EndElement { name } => {
                 if name.local_name == STR_REP {
-                    break
+                    break;
                 }
             }
             XmlEvent::Whitespace(_) => (),
-            o => {panic!("Unexpected {:?} in `{}`", o, STR_REP)}
+            o => panic!("Unexpected {:?} in `{}`", o, STR_REP),
         }
     }
 
-    let node_type_attr = &node_type.as_ref().expect("couldn't find `node type` attr on node")[..];
+    let node_type_attr = &node_type
+        .as_ref()
+        .expect("couldn't find `node type` attr on node")[..];
 
     let node_type = types::NodeType::construct(node_type_attr, &mut data, key);
-    assert!(data.is_empty(), "extra data on node {:?}: {:?}", node_type, data);
+    assert!(
+        data.is_empty(),
+        "extra data on node {:?}: {:?}",
+        node_type,
+        data
+    );
 
     let id = id_value.expect("couldn't find `id` value on node");
     let node_timestamp = node_timestamp.expect("couldn't find `timestamp` attr on node");
@@ -394,7 +461,7 @@ impl DataItem {
 
     fn build_data<R: std::io::Read>(
         parser: &mut EventReader<R>,
-        attributes: Vec<xml::attribute::OwnedAttribute>
+        attributes: Vec<xml::attribute::OwnedAttribute>,
     ) -> Self {
         let mut key_value = None;
         let mut contained_value = None;
@@ -411,14 +478,14 @@ impl DataItem {
             match e {
                 XmlEvent::EndElement { name } => {
                     if name.local_name == Self::STR_REP {
-                        break
+                        break;
                     }
                 }
                 XmlEvent::Characters(c) => {
                     contained_value = Some(c);
                 }
                 XmlEvent::Whitespace(_) => (),
-                o => {panic!("Unexpected {:?} in `{}`", o, Self::STR_REP)}
+                o => panic!("Unexpected {:?} in `{}`", o, Self::STR_REP),
             }
         }
 
@@ -432,7 +499,12 @@ impl DataItem {
 /// Remove and return an attribute from an attribute map according to the key, if present
 macro_rules! drain_opt_string_from {
     ( $attrs:ident, $key:ident, $attr:expr ) => {
-        $attrs.remove(&$key.get($attr).expect(&format!("could not find `{}` in key", $attr)).id)
+        $attrs.remove(
+            &$key
+                .get($attr)
+                .expect(&format!("could not find `{}` in key", $attr))
+                .id,
+        )
     };
 }
 /// Panic if the attribute string does not exist in the map
@@ -454,11 +526,11 @@ macro_rules! drain_bool_from {
 /// Panic if the optional attribute string cannot be parsed as an unsigned numeric value
 macro_rules! drain_opt_usize_from {
     ( $attrs:ident, $key:ident, $attr:expr ) => {
-        drain_opt_string_from!($attrs, $key, $attr)
-            .map(|inner_data| inner_data
+        drain_opt_string_from!($attrs, $key, $attr).map(|inner_data| {
+            inner_data
                 .parse::<usize>()
                 .expect(&format!("could not parse attribute `{}` as usize", $attr))
-            )
+        })
     };
 }
 /// Panic if the attribute string cannot be parsed as an unsigned numeric value
@@ -469,55 +541,89 @@ macro_rules! drain_usize_from {
             .expect(&format!("could not parse attribute `{}` as usize", $attr))
     };
 }
+/// Panic if the optional attribute string cannot be parsed as an signed numeric value
+macro_rules! drain_opt_isize_from {
+    ( $attrs:ident, $key:ident, $attr:expr ) => {
+        drain_opt_string_from!($attrs, $key, $attr).map(|inner_data| {
+            inner_data
+                .parse::<isize>()
+                .expect(&format!("could not parse attribute `{}` as isize", $attr))
+        })
+    };
+}
+/// Panic if the attribute string cannot be parsed as an signed numeric value
+macro_rules! drain_isize_from {
+    ( $attrs:ident, $key:ident, $attr:expr ) => {
+        drain_string_from!($attrs, $key, $attr)
+            .parse::<isize>()
+            .expect(&format!("could not parse attribute `{}` as isize", $attr))
+    };
+}
 
 /// Allows building this type from a type string and a set of associated attributes, each of which
 /// correspond to intelligible string representations through a key.
 ///
 /// Any attributes used will be drained from `attrs`.
 trait KeyedAttrs {
-    fn construct(type_str: &str, attrs: &mut HashMap<String, String>, key: &HashMap<String, KeyItem>) -> Self;
+    fn construct(
+        type_str: &str,
+        attrs: &mut HashMap<String, String>,
+        key: &HashMap<String, KeyItem>,
+    ) -> Self;
 }
 
 impl KeyedAttrs for types::NodeType {
-    fn construct(type_str: &str, attrs: &mut HashMap<String, String>, key: &HashMap<String, KeyItem>) -> Self {
+    fn construct(
+        type_str: &str,
+        attrs: &mut HashMap<String, String>,
+        key: &HashMap<String, KeyItem>,
+    ) -> Self {
         macro_rules! drain_opt_string {
-            ( $attr:expr ) => { drain_opt_string_from!(attrs, key, $attr) }
+            ( $attr:expr ) => {
+                drain_opt_string_from!(attrs, key, $attr)
+            };
         }
         macro_rules! drain_string {
-            ( $attr:expr ) => { drain_string_from!(attrs, key, $attr) }
+            ( $attr:expr ) => {
+                drain_string_from!(attrs, key, $attr)
+            };
         }
         macro_rules! drain_bool {
-            ( $attr:expr ) => { drain_bool_from!(attrs, key, $attr) }
+            ( $attr:expr ) => {
+                drain_bool_from!(attrs, key, $attr)
+            };
         }
         macro_rules! drain_usize {
-            ( $attr:expr ) => { drain_usize_from!(attrs, key, $attr) }
+            ( $attr:expr ) => {
+                drain_usize_from!(attrs, key, $attr)
+            };
         }
 
         match type_str {
             "extensions" => Self::Extensions {},
             "remote frame" => Self::RemoteFrame {
-                url: drain_string!("url")
+                frame_id: drain_string!("frame id"),
             },
             "resource" => Self::Resource {
-                url: drain_string!("url")
+                url: drain_string!("url"),
             },
             "ad filter" => Self::AdFilter {
-                rule: drain_string!("rule")
+                rule: drain_string!("rule"),
             },
             "tracker filter" => Self::TrackerFilter,
             "fingerprinting filter" => Self::FingerprintingFilter,
             "web API" => Self::WebApi {
-                method: drain_string!("method")
+                method: drain_string!("method"),
             },
             "JS builtin" => Self::JsBuiltin {
-                method: drain_string!("method")
+                method: drain_string!("method"),
             },
             "HTML element" => Self::HtmlElement {
                 tag_name: drain_string!("tag name"),
                 is_deleted: drain_bool!("is deleted"),
                 node_id: drain_usize!("node id"),
             },
-            "text node" => Self::TextNode{
+            "text node" => Self::TextNode {
                 text: drain_opt_string!("text"),
                 is_deleted: drain_bool!("is deleted"),
                 node_id: drain_usize!("node id"),
@@ -548,27 +654,52 @@ impl KeyedAttrs for types::NodeType {
             "trackers shield" => Self::TrackersShield {},
             "javascript shield" => Self::JavascriptShield {},
             "fingerprinting shield" => Self::FingerprintingShield {},
+            "fingerprintingV2 shield" => Self::FingerprintingV2Shield {},
             _ => panic!("Unknown node type `{}`", type_str),
         }
     }
 }
 
 impl KeyedAttrs for types::EdgeType {
-    fn construct(type_str: &str, attrs: &mut HashMap<String, String>, key: &HashMap<String, KeyItem>) -> Self {
+    fn construct(
+        type_str: &str,
+        attrs: &mut HashMap<String, String>,
+        key: &HashMap<String, KeyItem>,
+    ) -> Self {
         macro_rules! drain_opt_string {
-            ( $attr:expr ) => { drain_opt_string_from!(attrs, key, $attr) }
+            ( $attr:expr ) => {
+                drain_opt_string_from!(attrs, key, $attr)
+            };
         }
         macro_rules! drain_string {
-            ( $attr:expr ) => { drain_string_from!(attrs, key, $attr) }
+            ( $attr:expr ) => {
+                drain_string_from!(attrs, key, $attr)
+            };
         }
         macro_rules! drain_bool {
-            ( $attr:expr ) => { drain_bool_from!(attrs, key, $attr) }
+            ( $attr:expr ) => {
+                drain_bool_from!(attrs, key, $attr)
+            };
         }
         macro_rules! drain_opt_usize {
-            ( $attr:expr ) => { drain_opt_usize_from!(attrs, key, $attr) }
+            ( $attr:expr ) => {
+                drain_opt_usize_from!(attrs, key, $attr)
+            };
         }
         macro_rules! drain_usize {
-            ( $attr:expr ) => { drain_usize_from!(attrs, key, $attr) }
+            ( $attr:expr ) => {
+                drain_usize_from!(attrs, key, $attr)
+            };
+        }
+        macro_rules! drain_opt_isize {
+            ( $attr:expr ) => {
+                drain_opt_isize_from!(attrs, key, $attr)
+            };
+        }
+        macro_rules! drain_isize {
+            ( $attr:expr ) => {
+                drain_isize_from!(attrs, key, $attr)
+            };
         }
 
         match type_str {
@@ -590,18 +721,21 @@ impl KeyedAttrs for types::EdgeType {
             },
             "js call" => Self::JsCall {
                 args: drain_opt_string!("args"),
+                pos: drain_opt_usize!("script position"),
             },
             "request complete" => Self::RequestComplete {
                 resource_type: drain_string!("resource type"),
                 status: drain_string!("status"),
-                value: drain_string!("value"),
+                headers: drain_string!("headers"),
+                size: drain_isize!("size"),
                 response_hash: drain_opt_string!("response hash"),
                 request_id: drain_usize!("request id"),
             },
             "request error" => Self::RequestError {
                 status: drain_string!("status"),
                 request_id: drain_usize!("request id"),
-                value: drain_string!("value"),
+                headers: drain_string!("headers"),
+                size: drain_isize!("size"),
             },
             "request start" => Self::RequestStart {
                 request_type: crate::types::RequestType::from(&drain_string!("request type")[..]),
@@ -619,7 +753,7 @@ impl KeyedAttrs for types::EdgeType {
                 event_listener_id: drain_usize!("event listener id"),
                 script_id: drain_usize!("script id"),
             },
-            "event listener" => Self::EventListener{
+            "event listener" => Self::EventListener {
                 key: drain_string!("key"),
                 event_listener_id: drain_usize!("event listener id"),
             },
@@ -638,7 +772,7 @@ impl KeyedAttrs for types::EdgeType {
                 key: drain_string!("key"),
             },
             "clear storage" => Self::ClearStorage {
-                key: drain_string!("key"),
+                key: drain_opt_string!("key"),
             },
             "storage bucket" => Self::StorageBucket {},
             "execute from attribute" => Self::ExecuteFromAttribute {
