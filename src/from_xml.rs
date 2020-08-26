@@ -166,7 +166,7 @@ fn build_graph<R: std::io::Read>(parser: &mut EventReader<R>, key: &KeyModel) ->
 
     let mut edges = HashMap::new();
     let mut nodes = HashMap::new();
-    let mut graph = DiGraphMap::new();
+    let mut graph = DiGraphMap::<graph::NodeId, Vec<graph::EdgeId>>::new();
 
     while let Ok(e) = parser.next() {
         match e {
@@ -180,7 +180,11 @@ fn build_graph<R: std::io::Read>(parser: &mut EventReader<R>, key: &KeyModel) ->
                     "edge" => {
                         let (id, edge, (source, target)) = build_edge(parser, attributes, &key.edge_items);
                         edges.insert(id, edge);
-                        graph.add_edge(source, target, id);
+                        if let Some(edge) = graph.edge_weight_mut(source, target) {
+                            edge.push(id);
+                        } else {
+                            graph.add_edge(source, target, vec![id]);
+                        }
                     }
                     _ => println!("Unhandled local name in {}: {}", STR_REP, name.local_name),
                 }
@@ -600,7 +604,7 @@ impl KeyedAttrs for types::EdgeType {
                 value: drain_string!("value"),
             },
             "request start" => Self::RequestStart {
-                request_type: drain_string!("request type"),
+                request_type: crate::types::RequestType::from(&drain_string!("request type")[..]),
                 status: drain_string!("status"),
                 request_id: drain_usize!("request id"),
             },
@@ -633,7 +637,9 @@ impl KeyedAttrs for types::EdgeType {
             "read storage call" => Self::ReadStorageCall {
                 key: drain_string!("key"),
             },
-            "clear storage" => Self::ClearStorage,
+            "clear storage" => Self::ClearStorage {
+                key: drain_string!("key"),
+            },
             "storage bucket" => Self::StorageBucket {},
             "execute from attribute" => Self::ExecuteFromAttribute {
                 attr_name: drain_string!("attr name"),
