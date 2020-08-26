@@ -4,9 +4,18 @@ use petgraph::graphmap::DiGraphMap;
 
 use crate::types::{ NodeType, EdgeType };
 
+/// Contains metadata summary extracted from the <desc> block of a PageGraph GraphML file
+#[derive(Debug)]
+pub struct PageGraphMeta {
+    pub version: String,
+    pub url: Option<String>,
+    pub is_root: Option<bool>,
+}
+
 /// The main PageGraph data structure.
 #[derive(Debug)]
 pub struct PageGraph {
+    pub meta: Option<PageGraphMeta>,
     pub edges: HashMap<EdgeId, Edge>,
     pub nodes: HashMap<NodeId, Node>,
     pub graph: DiGraphMap<NodeId, Vec<EdgeId>>,

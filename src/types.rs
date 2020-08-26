@@ -1,11 +1,3 @@
-/// Contains metadata summary extracted from the <desc> block of a GraphML file
-#[derive(Debug)]
-pub struct PageGraphMeta {
-    url: String,
-    is_root: bool,
-}
-
-
 /// Represents the type of any PageGraph node, along with any associated type-specific data.
 #[derive(Clone, PartialEq, Debug)]
 pub enum NodeType {

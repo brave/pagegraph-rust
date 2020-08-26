@@ -34,11 +34,42 @@ fn parse_xml_document<R: std::io::Read>(parser: &mut EventReader<R>) -> graph::P
     }
 }
 
-fn ignore_desc<R: std::io::Read>(parser: &mut EventReader<R>) {
+fn build_scalar_tag_datum<R: std::io::Read>(parser: &mut EventReader<R>, tag_name: &str) -> Option<String> {
+    let mut contents = None;
     while let Ok(e) = parser.next() {
         match e {
-            XmlEvent::EndElement { name } if name.local_name == "desc" => return,
-            _ => {}
+            XmlEvent::EndElement { name } if name.local_name == tag_name => { break },
+            XmlEvent::Characters(c) => { contents = Some(c) },
+            XmlEvent::Whitespace(_) => {},
+            o => panic!("Unexpected {:?} in `{}`", o, tag_name),
+        }
+    }
+    contents
+}
+
+impl graph::PageGraphMeta {
+    fn build_meta<R: std::io::Read>(parser: &mut EventReader<R>) -> Self {
+        let mut version_string = None;
+        let mut url_string = None;
+        let mut is_root_string = None;
+        while let Ok(e) = parser.next() {
+            match e {
+                XmlEvent::StartElement { name, .. } => {
+                    match &name.local_name[..] {
+                        "version" => version_string = build_scalar_tag_datum(parser, "version"),
+                        "url" => url_string = build_scalar_tag_datum(parser, "url"),
+                        "is_root" => is_root_string = build_scalar_tag_datum(parser, "is_root"),
+                        _ => (),
+                    }
+                }
+                XmlEvent::EndElement { name } if name.local_name == "desc" => break,
+                _ => {}
+            }
+        }
+        Self {
+            version: version_string.expect("`version` missing from metadata block"),
+            url: url_string,
+            is_root: if is_root_string.is_some() { Some(is_root_string.unwrap() == "true") } else { None },
         }
     }
 }
@@ -46,6 +77,7 @@ fn ignore_desc<R: std::io::Read>(parser: &mut EventReader<R>) {
 fn parse_graphml<R: std::io::Read>(parser: &mut EventReader<R>) -> graph::PageGraph {
     let mut node_items = HashMap::new();
     let mut edge_items = HashMap::new();
+    let mut meta_data: Option<graph::PageGraphMeta> = None;
     while let Ok(e) = parser.next() {
         match e {
             XmlEvent::StartElement {
@@ -64,7 +96,7 @@ fn parse_graphml<R: std::io::Read>(parser: &mut EventReader<R>) -> graph::PageGr
                     break;
                 }
                 "desc" => {
-                    ignore_desc(parser);
+                    meta_data = Some(graph::PageGraphMeta::build_meta(parser));
                 }
                 _ => println!("Unhandled local name: {}", name.local_name),
             },
@@ -84,7 +116,7 @@ fn parse_graphml<R: std::io::Read>(parser: &mut EventReader<R>) -> graph::PageGr
         node_items,
         edge_items,
     };
-    let graph = Some(build_graph(parser, &key));
+    let graph = Some(build_graph(parser, &key, meta_data));
 
     while let Ok(e) = parser.next() {
         match e {
@@ -180,7 +212,7 @@ fn build_key<R: std::io::Read>(
     )
 }
 
-fn build_graph<R: std::io::Read>(parser: &mut EventReader<R>, key: &KeyModel) -> graph::PageGraph {
+fn build_graph<R: std::io::Read>(parser: &mut EventReader<R>, key: &KeyModel, meta_data: Option<graph::PageGraphMeta>) -> graph::PageGraph {
     const STR_REP: &'static str = "graph";
 
     let mut edges = HashMap::new();
@@ -219,6 +251,7 @@ fn build_graph<R: std::io::Read>(parser: &mut EventReader<R>, key: &KeyModel) ->
     }
 
     graph::PageGraph {
+        meta: meta_data,
         edges,
         nodes,
         graph,
