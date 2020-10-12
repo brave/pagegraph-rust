@@ -7,7 +7,7 @@ readme = "README.md"
 
 [dependencies]
 xml-rs = "^ 0.8"
-petgraph = {git = "https://github.com/antonok-edm/petgraph", rev = "edges-undirected", version = "^ 0.5", default_features = false, features = ["graphmap"]}
+petgraph = {git = "https://github.com/antonok-edm/petgraph", branch = "edges-undirected", version = "^ 0.5", default_features = false, features = ["graphmap"]}
 adblock = "^ 0.2"
 url = "^ 2.1"
 addr = "^ 0.2"

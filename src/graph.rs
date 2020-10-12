@@ -4,9 +4,25 @@ use petgraph::graphmap::DiGraphMap;
 
 use crate::types::{ NodeType, EdgeType };
 
+#[derive(Debug)]
+pub struct PageGraphDescriptor {
+    pub version: String,
+    pub about: String,
+    pub url: String,
+    pub is_root: bool,
+    pub time: PageGraphTime,
+}
+
+#[derive(Debug)]
+pub struct PageGraphTime {
+    pub start: u64,
+    pub end: u64,
+}
+
 /// The main PageGraph data structure.
 #[derive(Debug)]
 pub struct PageGraph {
+    pub desc: PageGraphDescriptor,
     pub edges: HashMap<EdgeId, Edge>,
     pub nodes: HashMap<NodeId, Node>,
     pub graph: DiGraphMap<NodeId, Vec<EdgeId>>,
