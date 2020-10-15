@@ -45,6 +45,7 @@ pub enum NodeType {
     TrackersShield {},
     JavascriptShield {},
     FingerprintingShield {},
+    FingerprintingV2Shield {},
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -98,13 +99,18 @@ pub enum EdgeType {
     },
     CreateNode {},
     JsResult { value: Option<String> },
-    JsCall { args: Option<String> },
+    JsCall {
+        args: Option<String>,
+        script_position: usize
+    },
     RequestComplete {
         resource_type: String,
         status: String,
-        value: String,
+        value: Option<String>,
         response_hash: Option<String>,
         request_id: usize,
+        headers: String,
+        size: String,
     },
     RequestError {
         status: String,

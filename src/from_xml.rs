@@ -34,7 +34,112 @@ fn parse_xml_document<R: std::io::Read>(parser: &mut EventReader<R>) -> graph::P
     }
 }
 
+/// For simple data items of the form `<local_name>This is the return value</local_name>`
+fn parse_str_data<R: std::io::Read>(
+    parser: &mut EventReader<R>,
+    _attributes: Vec<xml::attribute::OwnedAttribute>,
+    local_name: &str,
+) -> String {
+    let mut result = None;
+
+    while let Ok(e) = parser.next() {
+        match e {
+            XmlEvent::EndElement { name } => {
+                if name.local_name == local_name {
+                    break
+                }
+            }
+            XmlEvent::Characters(chars) => result = Some(chars),
+            XmlEvent::Whitespace(_) => (),
+            o => {panic!("Unexpected {:?} in `{}`", o, local_name)}
+        }
+    }
+
+    return result.unwrap();
+}
+
+fn build_desc<R: std::io::Read>(
+    parser: &mut EventReader<R>,
+    _attributes: Vec<xml::attribute::OwnedAttribute>
+) -> graph::PageGraphDescriptor {
+    const STR_REP: &'static str = "desc";
+
+    let mut version = None;
+    let mut about = None;
+    let mut url = None;
+    let mut is_root = None;
+    let mut time = None;
+
+    while let Ok(e) = parser.next() {
+        match e {
+            XmlEvent::EndElement { name } => {
+                if name.local_name == STR_REP {
+                    break
+                }
+            }
+            XmlEvent::StartElement { name, attributes, namespace: _ } => {
+                let local_name = &name.local_name[..];
+                match local_name {
+                    "version" => version = Some(parse_str_data(parser, attributes, local_name)),
+                    "about" => about = Some(parse_str_data(parser, attributes, local_name)),
+                    "url" => url = Some(parse_str_data(parser, attributes, local_name)),
+                    "is_root" => is_root = Some(parse_str_data(parser, attributes, local_name)),
+                    "time" => time = Some(build_time(parser, attributes)),
+                    o => panic!("unexpected {:?} in `{}`", o, STR_REP),
+                }
+            }
+            XmlEvent::Whitespace(_) => (),
+            o => {panic!("Unexpected {:?} in `{}`", o, STR_REP)}
+        }
+    }
+
+    graph::PageGraphDescriptor {
+        version: version.unwrap(),
+        about: about.unwrap(),
+        url: url.unwrap(),
+        is_root: is_root.unwrap().parse::<bool>().unwrap(),
+        time: time.unwrap(),
+    }
+}
+
+/// For the `time` element within `desc`.
+fn build_time<R: std::io::Read>(
+    parser: &mut EventReader<R>,
+    _attributes: Vec<xml::attribute::OwnedAttribute>
+) -> graph::PageGraphTime {
+    const STR_REP: &str = "time";
+
+    let mut start = None;
+    let mut end = None;
+
+    while let Ok(e) = parser.next() {
+        match e {
+            XmlEvent::EndElement { name } => {
+                if name.local_name == STR_REP {
+                    break
+                }
+            }
+            XmlEvent::StartElement { name, attributes, namespace: _ } => {
+                let local_name = &name.local_name[..];
+                match local_name {
+                    "start" => start = Some(parse_str_data(parser, attributes, local_name)),
+                    "end" => end = Some(parse_str_data(parser, attributes, local_name)),
+                    o => panic!("unexpected {:?} in `{}`", o, STR_REP),
+                }
+            }
+            XmlEvent::Whitespace(_) => (),
+            o => {panic!("Unexpected {:?} in `{}`", o, STR_REP)}
+        }
+    }
+
+    graph::PageGraphTime {
+        start: start.unwrap().parse::<u64>().unwrap(),
+        end: end.unwrap().parse::<u64>().unwrap(),
+    }
+}
+
 fn parse_graphml<R: std::io::Read>(parser: &mut EventReader<R>) -> graph::PageGraph {
+    let mut desc = None;
     let mut node_items = HashMap::new();
     let mut edge_items = HashMap::new();
     while let Ok(e) = parser.next() {
@@ -48,6 +153,7 @@ fn parse_graphml<R: std::io::Read>(parser: &mut EventReader<R>) -> graph::PageGr
                             KeyItemFor::Edge => edge_items.insert(id, key),
                         };
                     }
+                    "desc" => desc = Some(build_desc(parser, attributes)),
                     "graph" => {
                         break;
                     }
@@ -67,7 +173,7 @@ fn parse_graphml<R: std::io::Read>(parser: &mut EventReader<R>) -> graph::PageGr
     }
 
     let key = KeyModel { node_items, edge_items };
-    let graph = Some(build_graph(parser, &key));
+    let graph = Some(build_graph(parser, &key, desc.expect("could not find desc")));
 
     while let Ok(e) = parser.next() {
         match e {
@@ -161,7 +267,7 @@ fn build_key<R: std::io::Read>(
     )
 }
 
-fn build_graph<R: std::io::Read>(parser: &mut EventReader<R>, key: &KeyModel) -> graph::PageGraph {
+fn build_graph<R: std::io::Read>(parser: &mut EventReader<R>, key: &KeyModel, desc: graph::PageGraphDescriptor) -> graph::PageGraph {
     const STR_REP: &'static str = "graph";
 
     let mut edges = HashMap::new();
@@ -200,6 +306,7 @@ fn build_graph<R: std::io::Read>(parser: &mut EventReader<R>, key: &KeyModel) ->
     }
 
     graph::PageGraph {
+        desc,
         edges,
         nodes,
         graph,
@@ -346,7 +453,7 @@ fn build_node<R: std::io::Read>(
                                 .trim_end_matches("0")
                                 .trim_end_matches(".")
                                 .parse::<isize>()
-                                .expect(&format!("parse node timestamp as isize: {}", contained))
+                                .unwrap_or_default()
                             );
                         } else {
                             data.insert(data_item.key, contained);
@@ -464,9 +571,12 @@ macro_rules! drain_opt_usize_from {
 /// Panic if the attribute string cannot be parsed as an unsigned numeric value
 macro_rules! drain_usize_from {
     ( $attrs:ident, $key:ident, $attr:expr ) => {
-        drain_string_from!($attrs, $key, $attr)
-            .parse::<usize>()
-            .expect(&format!("could not parse attribute `{}` as usize", $attr))
+        {
+            let value = drain_string_from!($attrs, $key, $attr);
+            value
+                .parse::<usize>()
+                .expect(&format!("could not parse attribute `{}` as usize: `{}`", $attr, value))
+        }
     };
 }
 
@@ -548,6 +658,7 @@ impl KeyedAttrs for types::NodeType {
             "trackers shield" => Self::TrackersShield {},
             "javascript shield" => Self::JavascriptShield {},
             "fingerprinting shield" => Self::FingerprintingShield {},
+            "fingerprintingV2 shield" => Self::FingerprintingV2Shield {},
             _ => panic!("Unknown node type `{}`", type_str),
         }
     }
@@ -590,13 +701,16 @@ impl KeyedAttrs for types::EdgeType {
             },
             "js call" => Self::JsCall {
                 args: drain_opt_string!("args"),
+                script_position: drain_usize!("script position"),
             },
             "request complete" => Self::RequestComplete {
                 resource_type: drain_string!("resource type"),
                 status: drain_string!("status"),
-                value: drain_string!("value"),
+                value: drain_opt_string!("value"),
                 response_hash: drain_opt_string!("response hash"),
                 request_id: drain_usize!("request id"),
+                headers: drain_string!("headers"),
+                size: drain_string!("size"),
             },
             "request error" => Self::RequestError {
                 status: drain_string!("status"),

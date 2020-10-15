@@ -95,23 +95,7 @@ impl PageGraph {
 
     /// Gets the URL of the page the graph was recorded from
     pub fn root_url(&self) -> String {
-        let root_urls = self.nodes
-            .iter()
-            .filter(|(node_id, node)| {
-                if let NodeType::DomRoot { .. } = node.node_type {
-                    self.graph.edges_directed(*node_id.to_owned(), Direction::Incoming).count() == 0
-                } else {
-                    false
-                }
-            })
-            .map(|(_, node)| {
-                match &node.node_type {
-                    NodeType::DomRoot { url: Some(url), .. } => url,
-                    _ => panic!("Could not find DOM root URL"),
-                }
-            }).collect::<Vec<_>>();
-        assert_eq!(root_urls.len(), 1, "Could not determine root URL");
-        return root_urls[0].to_string();
+        return self.desc.url.to_string();
     }
 
     pub fn resource_request_types(&self, resource_node: &NodeId) -> Vec<String> {
@@ -162,7 +146,10 @@ impl PageGraph {
                             Err(_) => return false,
                         };
                         let request_url_scheme = request_url.scheme();
-                        let request_url_hostname = request_url.host_str().expect("Request URL has no host");
+                        let request_url_hostname = match request_url.host_str() {
+                            Some(host) => host,
+                            None => return false,
+                        };
                         let request_url_domain = get_domain(request_url_hostname);
 
                         let request_types = self.resource_request_types(id);
@@ -274,6 +261,7 @@ impl PageGraph {
             NodeType::TrackersShield {} => unimplemented!(),
             NodeType::JavascriptShield {} => unimplemented!(),
             NodeType::FingerprintingShield {} => unimplemented!(),
+            NodeType::FingerprintingV2Shield {} => unimplemented!(),
         }
     }
 
