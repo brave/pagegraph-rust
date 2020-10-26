@@ -372,7 +372,7 @@ fn build_edge<R: std::io::Read>(
                                 .trim_end_matches("0")
                                 .trim_end_matches(".")
                                 .parse::<isize>()
-                                .expect(&format!("parse edge timestamp as isize: {}", contained))
+                                .unwrap_or_default()
                             );
                         } else {
                             data.insert(data_item.key, contained);
@@ -606,7 +606,7 @@ impl KeyedAttrs for types::NodeType {
         match type_str {
             "extensions" => Self::Extensions {},
             "remote frame" => Self::RemoteFrame {
-                url: drain_string!("url")
+                frame_id: drain_string!("frame id")
             },
             "resource" => Self::Resource {
                 url: drain_string!("url")
@@ -715,7 +715,9 @@ impl KeyedAttrs for types::EdgeType {
             "request error" => Self::RequestError {
                 status: drain_string!("status"),
                 request_id: drain_usize!("request id"),
-                value: drain_string!("value"),
+                value: drain_opt_string!("value"),
+                headers: drain_string!("headers"),
+                size: drain_string!("size"),
             },
             "request start" => Self::RequestStart {
                 request_type: crate::types::RequestType::from(&drain_string!("request type")[..]),

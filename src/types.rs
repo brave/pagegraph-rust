@@ -2,7 +2,9 @@
 #[derive(Clone, PartialEq, Debug)]
 pub enum NodeType {
     Extensions {},
-    RemoteFrame { url: String },
+    RemoteFrame {
+        frame_id: String,
+    },
     Resource { url: String },
     AdFilter { rule: String },
     TrackerFilter,  // TODO
@@ -115,7 +117,9 @@ pub enum EdgeType {
     RequestError {
         status: String,
         request_id: usize,
-        value: String,
+        value: Option<String>,
+        headers: String,
+        size: String,
     },
     RequestStart {
         request_type: RequestType,
