@@ -98,7 +98,11 @@ impl PageGraph {
         return self.desc.url.to_string();
     }
 
-    pub fn resource_request_types(&self, resource_node: &NodeId) -> Vec<String> {
+    /// Get every request type and associated resource size for a given resource.
+    ///
+    /// Some requests, like streamed fetches, video, or audio cannot be properly sized, so their
+    /// sizes will be None.
+    pub fn resource_request_types(&self, resource_node: &NodeId) -> Vec<(String, Option<usize>)> {
         if let NodeType::Resource { .. } = self.nodes.get(resource_node).unwrap().node_type {
             let request_start_edges = self.graph
                 .edges_directed(resource_node.to_owned(), Direction::Incoming)
@@ -109,15 +113,31 @@ impl PageGraph {
                     _ => false,
                 });
             let unique_request_types = request_start_edges.map(|edge_id|
-                    if let Some(Edge { edge_type: EdgeType::RequestStart { request_type, .. }, .. }) = self.edges.get(edge_id) {
-                        request_type.as_str().to_owned()
+                    if let Some(Edge { edge_type: EdgeType::RequestStart { request_type, request_id, .. }, .. }) = self.edges.get(edge_id) {
+                        let request_type = request_type.as_str().to_owned();
+
+                        let mut matching_request_sizes = self.edges
+                            .iter()
+                            .filter_map(|(_, Edge { edge_type, .. })| if let EdgeType::RequestComplete { size, request_id: id, .. } = edge_type {
+                                    if id == request_id {
+                                        Some(size.parse::<usize>().ok())
+                                    } else {
+                                        None
+                                    }
+                                } else {
+                                    None
+                                });
+
+                        let size = matching_request_sizes.next().unwrap_or_default();
+
+                        (request_type, size)
                     } else {
                         unreachable!()
                     }
                 ).collect::<std::collections::HashSet<_>>()
                 .into_iter().collect::<Vec<_>>();
             if unique_request_types.len() == 0 {
-                return vec!["other".to_string()]
+                return vec![("other".to_string(), None)]
             }
 
             unique_request_types
