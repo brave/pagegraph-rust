@@ -1,9 +1,98 @@
-use crate::graph::{ PageGraph, Edge, EdgeId, Node, NodeId };
+use crate::graph::{ PageGraph, Edge, EdgeId, Node, NodeId, FrameId };
 use crate::types::{ EdgeType, NodeType };
 
 use petgraph::Direction;
 
 impl PageGraph {
+    pub fn all_remote_frame_ids(&self) -> Vec<FrameId> {
+        self.nodes.iter().filter_map(|(_node_id, node)|
+            if let NodeType::RemoteFrame { frame_id } = node.node_type {
+                Some(frame_id)
+            } else {
+                None
+            }
+        ).collect()
+    }
+
+    /// Inserts the graph for a given frame into this graph, namespacing ids to avoid conflicts.
+    /// The matching `remote frame` node will gain two new outgoing `cross DOM` edges to the `DOM
+    /// root` and `parser` nodes from the frame.
+    pub fn merge_frame(&mut self, frame_graph: PageGraph, frame_id: &FrameId) {
+        assert!(self.desc.is_root);
+        assert!(!frame_graph.desc.is_root);
+
+        // Find the single `remote frame` node with the specified `frame_id`
+        let matching_remote_frames = self.filter_nodes(|n| if let NodeType::RemoteFrame { frame_id: node_frame_id } = n { node_frame_id == frame_id } else { false });
+        assert!(matching_remote_frames.len() == 1);
+        let remote_frame = matching_remote_frames[0].0.clone();
+
+        // Find the frame's single "DOM root" node with no incoming "cross DOM" edges
+        let matching_dom_roots: Vec<_> = frame_graph.nodes.iter().filter(|(id, node)| {
+            if let NodeType::DomRoot { .. } = node.node_type {
+                frame_graph.graph.edges_directed(**id, Direction::Incoming).map(|(_, _, edge_ids)| {
+                    edge_ids.iter().filter(|edge_id| {
+                        if let EdgeType::CrossDom {} = frame_graph.edges.get(&edge_id).unwrap().edge_type { true } else { false }
+                    }).collect::<Vec<_>>()
+                }).flatten().collect::<Vec<_>>().is_empty()
+            } else {
+                false
+            }
+        }).collect();
+        assert!(matching_dom_roots.len() == 1);
+        let dom_root = matching_dom_roots[0].0.clone();
+
+        // Find the frame's single "parser" node with no incoming "cross DOM" edges
+        let matching_parsers: Vec<_> = frame_graph.nodes.iter().filter(|(id, node)| {
+            if let NodeType::Parser { .. } = node.node_type {
+                frame_graph.graph.edges_directed(**id, Direction::Incoming).map(|(_, _, edge_ids)| {
+                    edge_ids.iter().filter(|edge_id| {
+                        if let EdgeType::CrossDom {} = frame_graph.edges.get(&edge_id).unwrap().edge_type { true } else { false }
+                    }).collect::<Vec<_>>()
+                }).flatten().collect::<Vec<_>>().is_empty()
+            } else {
+                false
+            }
+        }).collect();
+        assert!(matching_parsers.len() == 1);
+        let parser = matching_parsers[0].0.clone();
+
+        // TODO "Brave Shields" node should be merged as well
+
+        // For each node in the frame graph
+        frame_graph.graph.nodes().for_each(|node_id| {
+            // create a new id for the node by prepending the frame id
+            let new_node_id = node_id.copy_for_frame_id(frame_id);
+            let node_data = frame_graph.nodes.get(&node_id).unwrap();
+
+            // insert a copy of the node, with the new id, into the root graph
+            self.nodes.insert(new_node_id, node_data.clone());
+            self.graph.add_node(new_node_id);
+
+            // if the original node has the previously discovered "DOM root" or "parser" id:
+            if node_id == dom_root || node_id == parser {
+                // insert a new edge from "remote frame" to the new node
+                let new_edge_id = self.new_edge_id();
+                self.graph.add_edge(remote_frame, node_id, vec![new_edge_id]);
+                self.edges.insert(new_edge_id, Edge { edge_timestamp: None, edge_type: EdgeType::CrossDom {} });
+            }
+        });
+
+        // For each edge in the frame graph
+        frame_graph.graph.all_edges().for_each(|(from_node_id, to_node_id, edge_ids)| {
+            // create a new id for the source, target, and edge by prepending the frame id
+            let new_from_node_id = from_node_id.copy_for_frame_id(frame_id);
+            let new_to_node_id = to_node_id.copy_for_frame_id(frame_id);
+
+            // insert a copy of the edge, with the new id, into the root graph
+            let new_edge_ids = edge_ids.iter().map(|edge_id| {
+                let new_edge_id = edge_id.copy_for_frame_id(frame_id);
+                self.edges.insert(new_edge_id, frame_graph.edges.get(edge_id).unwrap().clone());
+                new_edge_id
+            }).collect::<Vec<_>>();
+            self.graph.add_edge(new_from_node_id, new_to_node_id, new_edge_ids);
+        });
+    }
+
     pub fn filter_edges<F: Fn(&EdgeType) -> bool>(&self, f: F) -> Vec<(&EdgeId, &Edge)> {
         self.edges.iter().filter(|(_id, edge)| {
             f(&edge.edge_type)

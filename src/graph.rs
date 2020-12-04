@@ -26,20 +26,73 @@ pub struct PageGraph {
     pub edges: HashMap<EdgeId, Edge>,
     pub nodes: HashMap<NodeId, Node>,
     pub graph: DiGraphMap<NodeId, Vec<EdgeId>>,
+
+    next_node_id: std::cell::RefCell<usize>,
+    next_edge_id: std::cell::RefCell<usize>,
+}
+
+impl PageGraph {
+    pub fn new(desc: PageGraphDescriptor, edges: HashMap<EdgeId, Edge>, nodes: HashMap<NodeId, Node>, graph: DiGraphMap<NodeId, Vec<EdgeId>>) -> Self {
+        Self {
+            desc,
+            edges,
+            nodes,
+            graph,
+            next_edge_id: std::cell::RefCell::new(usize::MAX),
+            next_node_id: std::cell::RefCell::new(usize::MAX),
+        }
+    }
+
+    /// Returns a new edge id that is guaranteed not to collide with an existing id in the graph.
+    pub(crate) fn new_edge_id(&self) -> EdgeId {
+        let new_id = EdgeId::from(self.next_edge_id.replace_with(|id| *id - 1));
+        assert!(!self.edges.contains_key(&new_id));
+        new_id
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, PartialOrd, Ord)]
+struct GraphItemId {
+    id: usize,
+    frame_id: Option<FrameId>,
+}
+
+impl From<usize> for GraphItemId {
+    fn from(v: usize) -> Self {
+        Self {
+            id: v,
+            frame_id: None
+        }
+    }
+}
+
+impl GraphItemId {
+    fn copy_for_frame_id(&self, frame_id: &FrameId) -> Self {
+        Self {
+            id: self.id,
+            frame_id: Some(frame_id.clone()),
+        }
+    }
 }
 
 /// An identifier used to reference a node.
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, PartialOrd, Ord)]
-pub struct NodeId(usize);
+pub struct NodeId(GraphItemId);
 
 impl From<usize> for NodeId {
     fn from(v: usize) -> Self {
-        NodeId(v)
+        Self(v.into())
+    }
+}
+
+impl NodeId {
+    pub fn copy_for_frame_id(&self, frame_id: &FrameId) -> Self {
+        Self(self.0.copy_for_frame_id(frame_id))
     }
 }
 
 /// A node, representing a side effect of a page load.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Node {
     pub node_timestamp: isize,
     pub node_type: NodeType,
@@ -47,17 +100,40 @@ pub struct Node {
 
 /// An identifier used to reference an edge.
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, PartialOrd, Ord)]
-pub struct EdgeId(usize);
+pub struct EdgeId(GraphItemId);
 
 impl From<usize> for EdgeId {
     fn from(v: usize) -> Self {
-        EdgeId(v)
+        EdgeId(v.into())
+    }
+}
+
+impl EdgeId {
+    pub fn copy_for_frame_id(&self, frame_id: &FrameId) -> Self {
+        Self(self.0.copy_for_frame_id(frame_id))
     }
 }
 
 /// An edge, representing an action taken during page load.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Edge {
     pub edge_timestamp: Option<isize>,
     pub edge_type: EdgeType,
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, PartialOrd, Ord)]
+pub struct FrameId(u128);
+
+impl From<&str> for FrameId {
+    /// Chromium formats these 128-bit tokens as 32-character hexadecimal strings.
+    fn from(v: &str) -> Self {
+        assert_eq!(v.len(), 32);
+        Self(u128::from_str_radix(v, 16).unwrap_or_else(|_| panic!("{} is an incorrectly formatted frame id", v)))
+    }
+}
+
+impl std::fmt::Display for FrameId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:X}", self.0)
+    }
 }

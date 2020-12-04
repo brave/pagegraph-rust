@@ -1,9 +1,11 @@
+use crate::graph::FrameId;
+
 /// Represents the type of any PageGraph node, along with any associated type-specific data.
 #[derive(Clone, PartialEq, Debug)]
 pub enum NodeType {
     Extensions {},
     RemoteFrame {
-        frame_id: String,
+        frame_id: FrameId,
     },
     Resource { url: String },
     AdFilter { rule: String },

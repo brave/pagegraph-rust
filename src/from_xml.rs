@@ -305,12 +305,7 @@ fn build_graph<R: std::io::Read>(parser: &mut EventReader<R>, key: &KeyModel, de
         }
     }
 
-    graph::PageGraph {
-        desc,
-        edges,
-        nodes,
-        graph,
-    }
+    graph::PageGraph::new(desc, edges, nodes, graph)
 }
 
 fn build_edge<R: std::io::Read>(
@@ -606,7 +601,7 @@ impl KeyedAttrs for types::NodeType {
         match type_str {
             "extensions" => Self::Extensions {},
             "remote frame" => Self::RemoteFrame {
-                frame_id: drain_string!("frame id")
+                frame_id: graph::FrameId::from(&drain_string!("frame id") as &str)
             },
             "resource" => Self::Resource {
                 url: drain_string!("url")
