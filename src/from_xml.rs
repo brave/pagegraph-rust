@@ -279,18 +279,18 @@ fn build_graph<R: std::io::Read>(parser: &mut EventReader<R>, key: &KeyModel, de
             XmlEvent::StartElement { name, attributes, namespace: _ } => {
                 match &name.local_name[..] {
                     "node" => {
-                        let (id, node) = build_node(parser, attributes, &key.node_items);
-                        nodes.insert(id, node);
-                        graph.add_node(id);
+                        let node = build_node(parser, attributes, &key.node_items);
+                        graph.add_node(node.id);
+                        nodes.insert(node.id, node);
                     }
                     "edge" => {
-                        let (id, edge, (source, target)) = build_edge(parser, attributes, &key.edge_items);
-                        edges.insert(id, edge);
-                        if let Some(edge) = graph.edge_weight_mut(source, target) {
-                            edge.push(id);
+                        let edge = build_edge(parser, attributes, &key.edge_items);
+                        if let Some(concurrent_edges) = graph.edge_weight_mut(edge.source, edge.target) {
+                            concurrent_edges.push(edge.id);
                         } else {
-                            graph.add_edge(source, target, vec![id]);
+                            graph.add_edge(edge.source, edge.target, vec![edge.id]);
                         }
+                        edges.insert(edge.id, edge);
                     }
                     _ => println!("Unhandled local name in {}: {}", STR_REP, name.local_name),
                 }
@@ -312,7 +312,7 @@ fn build_edge<R: std::io::Read>(
     parser: &mut EventReader<R>,
     attributes: Vec<xml::attribute::OwnedAttribute>,
     key: &HashMap<String, KeyItem>
-) -> (graph::EdgeId, graph::Edge, (graph::NodeId, graph::NodeId)) {
+) -> graph::Edge {
     const STR_REP: &'static str = "edge";
 
     let mut id_value = None;
@@ -395,19 +395,20 @@ fn build_edge<R: std::io::Read>(
     let source = source_value.expect("couldn't find `source` value on edge");
     let target = target_value.expect("couldn't find `target` value on edge");
 
-    let edge_item = graph::Edge {
+    graph::Edge {
+        id,
         edge_type,
         edge_timestamp,
-    };
-
-    (id, edge_item, (source, target))
+        source,
+        target,
+    }
 }
 
 fn build_node<R: std::io::Read>(
     parser: &mut EventReader<R>,
     attributes: Vec<xml::attribute::OwnedAttribute>,
     key: &HashMap<String, KeyItem>
-) -> (graph::NodeId, graph::Node) {
+) -> graph::Node {
     const STR_REP: &'static str = "node";
 
     let mut id_value = None;
@@ -475,12 +476,11 @@ fn build_node<R: std::io::Read>(
     let id = id_value.expect("couldn't find `id` value on node");
     let node_timestamp = node_timestamp.expect("couldn't find `timestamp` attr on node");
 
-    let node_item = graph::Node {
+    graph::Node {
+        id,
         node_type,
         node_timestamp,
-    };
-
-    (id, node_item)
+    }
 }
 
 /// Represents a `data` GraphML node, which provides attributes associated with a particular node

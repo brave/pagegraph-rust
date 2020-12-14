@@ -75,6 +75,14 @@ impl GraphItemId {
     }
 }
 
+pub trait HasFrameId {
+    fn get_frame_id(&self) -> Option<FrameId>;
+}
+
+pub fn is_same_frame_context<A: HasFrameId, B: HasFrameId>(a: A, b: B) -> bool {
+    a.get_frame_id() == b.get_frame_id()
+}
+
 /// An identifier used to reference a node.
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, PartialOrd, Ord)]
 pub struct NodeId(GraphItemId);
@@ -91,9 +99,16 @@ impl NodeId {
     }
 }
 
+impl HasFrameId for NodeId {
+    fn get_frame_id(&self) -> Option<FrameId> {
+        self.0.frame_id
+    }
+}
+
 /// A node, representing a side effect of a page load.
 #[derive(Debug, Clone)]
 pub struct Node {
+    pub id: NodeId,
     pub node_timestamp: isize,
     pub node_type: NodeType,
 }
@@ -114,11 +129,26 @@ impl EdgeId {
     }
 }
 
+impl HasFrameId for EdgeId {
+    fn get_frame_id(&self) -> Option<FrameId> {
+        self.0.frame_id
+    }
+}
+
 /// An edge, representing an action taken during page load.
 #[derive(Debug, Clone)]
 pub struct Edge {
+    pub id: EdgeId,
     pub edge_timestamp: Option<isize>,
     pub edge_type: EdgeType,
+    pub source: NodeId,
+    pub target: NodeId,
+}
+
+impl PartialEq for Edge {
+    fn eq(&self, rhs: &Self) -> bool {
+        self.id == rhs.id
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, PartialOrd, Ord)]
