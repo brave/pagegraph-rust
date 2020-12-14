@@ -22,39 +22,35 @@ impl PageGraph {
         assert!(!frame_graph.desc.is_root);
 
         // Find the single `remote frame` node with the specified `frame_id`
-        let matching_remote_frames = self.filter_nodes(|n| if let NodeType::RemoteFrame { frame_id: node_frame_id } = n { node_frame_id == frame_id } else { false });
+        let matching_remote_frames = self.filter_nodes(|n| matches!(n, NodeType::RemoteFrame { frame_id: node_frame_id } if node_frame_id == frame_id));
         assert!(matching_remote_frames.len() == 1);
-        let remote_frame = matching_remote_frames[0].0.clone();
+        let remote_frame = matching_remote_frames[0].id.clone();
 
         // Find the frame's single "DOM root" node with no incoming "cross DOM" edges
-        let matching_dom_roots: Vec<_> = frame_graph.nodes.iter().filter(|(id, node)| {
+        let matching_dom_roots: Vec<_> = frame_graph.nodes.values().filter(|node| {
             if let NodeType::DomRoot { .. } = node.node_type {
-                frame_graph.graph.edges_directed(**id, Direction::Incoming).map(|(_, _, edge_ids)| {
-                    edge_ids.iter().filter(|edge_id| {
-                        if let EdgeType::CrossDom {} = frame_graph.edges.get(&edge_id).unwrap().edge_type { true } else { false }
-                    }).collect::<Vec<_>>()
-                }).flatten().collect::<Vec<_>>().is_empty()
+                frame_graph.incoming_edges(node).filter(|edge| {
+                    matches!(edge.edge_type, EdgeType::CrossDom {})
+                }).next().is_none()
             } else {
                 false
             }
         }).collect();
-        assert!(matching_dom_roots.len() == 1);
-        let dom_root = matching_dom_roots[0].0.clone();
+        assert_eq!(matching_dom_roots.len(), 1, "Wrong number of top-level DOM roots");
+        let dom_root = matching_dom_roots[0].id.clone();
 
         // Find the frame's single "parser" node with no incoming "cross DOM" edges
-        let matching_parsers: Vec<_> = frame_graph.nodes.iter().filter(|(id, node)| {
+        let matching_parsers: Vec<_> = frame_graph.nodes.values().filter(|node| {
             if let NodeType::Parser { .. } = node.node_type {
-                frame_graph.graph.edges_directed(**id, Direction::Incoming).map(|(_, _, edge_ids)| {
-                    edge_ids.iter().filter(|edge_id| {
-                        if let EdgeType::CrossDom {} = frame_graph.edges.get(&edge_id).unwrap().edge_type { true } else { false }
-                    }).collect::<Vec<_>>()
-                }).flatten().collect::<Vec<_>>().is_empty()
+                frame_graph.incoming_edges(node).filter(|edge| {
+                    matches!(edge.edge_type, EdgeType::CrossDom {})
+                }).next().is_none()
             } else {
                 false
             }
         }).collect();
-        assert!(matching_parsers.len() == 1);
-        let parser = matching_parsers[0].0.clone();
+        assert_eq!(matching_parsers.len(), 1, "Wrong number of top-level parsers");
+        let parser = matching_parsers[0].id.clone();
 
         // TODO "Brave Shields" node should be merged as well
 
@@ -62,18 +58,28 @@ impl PageGraph {
         frame_graph.graph.nodes().for_each(|node_id| {
             // create a new id for the node by prepending the frame id
             let new_node_id = node_id.copy_for_frame_id(frame_id);
-            let node_data = frame_graph.nodes.get(&node_id).unwrap();
+            let mut new_node = frame_graph.nodes.get(&node_id).unwrap().clone();
+            new_node.id = new_node_id;
 
             // insert a copy of the node, with the new id, into the root graph
-            self.nodes.insert(new_node_id, node_data.clone());
-            self.graph.add_node(new_node_id);
+            self.graph.add_node(new_node.id);
+            self.nodes.insert(new_node.id, new_node);
 
             // if the original node has the previously discovered "DOM root" or "parser" id:
             if node_id == dom_root || node_id == parser {
                 // insert a new edge from "remote frame" to the new node
-                let new_edge_id = self.new_edge_id();
-                self.graph.add_edge(remote_frame, node_id, vec![new_edge_id]);
-                self.edges.insert(new_edge_id, Edge { edge_timestamp: None, edge_type: EdgeType::CrossDom {} });
+                let new_edge = Edge {
+                    id: self.new_edge_id(),
+                    edge_timestamp: None,
+                    edge_type: EdgeType::CrossDom {},
+                    source: remote_frame,
+                    target: new_node_id,
+                };
+                match self.graph.edge_weight_mut(remote_frame, new_node_id) {
+                    Some(edges) => edges.push(new_edge.id),
+                    None => { self.graph.add_edge(remote_frame, new_node_id, vec![new_edge.id]); },
+                }
+                self.edges.insert(new_edge.id, new_edge);
             }
         });
 
@@ -83,24 +89,28 @@ impl PageGraph {
             let new_from_node_id = from_node_id.copy_for_frame_id(frame_id);
             let new_to_node_id = to_node_id.copy_for_frame_id(frame_id);
 
-            // insert a copy of the edge, with the new id, into the root graph
+            // insert a copy of the edge, with the new ids, into the root graph
             let new_edge_ids = edge_ids.iter().map(|edge_id| {
+                let mut new_edge = frame_graph.edges.get(edge_id).unwrap().clone();
                 let new_edge_id = edge_id.copy_for_frame_id(frame_id);
-                self.edges.insert(new_edge_id, frame_graph.edges.get(edge_id).unwrap().clone());
+                new_edge.id = new_edge_id;
+                new_edge.source = new_from_node_id;
+                new_edge.target = new_to_node_id;
+                self.edges.insert(new_edge.id, new_edge);
                 new_edge_id
             }).collect::<Vec<_>>();
             self.graph.add_edge(new_from_node_id, new_to_node_id, new_edge_ids);
         });
     }
 
-    pub fn filter_edges<F: Fn(&EdgeType) -> bool>(&self, f: F) -> Vec<(&EdgeId, &Edge)> {
-        self.edges.iter().filter(|(_id, edge)| {
+    pub fn filter_edges<F: Fn(&EdgeType) -> bool>(&self, f: F) -> Vec<&Edge> {
+        self.edges.values().filter(|edge| {
             f(&edge.edge_type)
         }).collect()
     }
 
-    pub fn filter_nodes<F: Fn(&NodeType) -> bool>(&self, f: F) -> Vec<(&NodeId, &Node)> {
-        self.nodes.iter().filter(|(_id, node)| {
+    pub fn filter_nodes<F: Fn(&NodeType) -> bool>(&self, f: F) -> Vec<&Node> {
+        self.nodes.values().filter(|node| {
             f(&node.node_type)
         }).collect()
     }
@@ -263,7 +273,7 @@ impl PageGraph {
 
                         let request_types = self.resource_request_types(id);
 
-                        request_types.iter().map(|request_type| rule.matches(&adblock::request::Request::new(
+                        request_types.iter().map(|(request_type, _size)| rule.matches(&adblock::request::Request::new(
                             request_type,
                             url,
                             request_url_scheme,

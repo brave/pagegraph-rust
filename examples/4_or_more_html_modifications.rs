@@ -15,10 +15,10 @@ fn main() {
         }
     });
 
-    let mut heavily_modified_elements: Vec<_> = html_elements.iter().filter_map(|(node_id, _node)| {
-        let num_modifications = graph.all_html_element_modifications(**node_id).len();
+    let mut heavily_modified_elements: Vec<_> = html_elements.iter().filter_map(|node| {
+        let num_modifications = graph.all_html_element_modifications(node.id).len();
         if num_modifications >= 4 {
-            Some((*node_id, num_modifications))
+            Some((node.id, num_modifications))
         } else {
             None
         }
@@ -31,8 +31,8 @@ fn main() {
     });
 
     heavily_modified_elements.iter().map(|(id, _)| *id).for_each(|id| {
-        let modifications = graph.all_html_element_modifications(*id);
-        dbg!(graph.nodes.get(id));
+        let modifications = graph.all_html_element_modifications(id);
+        dbg!(graph.nodes.get(&id));
         dbg!(modifications);
     });
 }
