@@ -49,6 +49,46 @@ impl PageGraph {
         assert!(!self.edges.contains_key(&new_id));
         new_id
     }
+
+    pub fn source_node<'a>(&'a self, edge: &Edge) -> &'a Node {
+        self.nodes.get(&edge.source).unwrap_or_else(|| panic!("Source node for edge {:?} could not be found in the graph", edge))
+    }
+
+    pub fn target_node<'a>(&'a self, edge: &Edge) -> &'a Node {
+        self.nodes.get(&edge.target).unwrap_or_else(|| panic!("Target node for edge {:?} could not be found in the graph", edge))
+    }
+
+    pub fn outgoing_edges<'a>(&'a self, node: &Node) -> impl Iterator<Item=&'a Edge> {
+        self.edges_iter_directed(node, petgraph::Direction::Outgoing)
+    }
+
+    pub fn incoming_edges<'a>(&'a self, node: &Node) -> impl Iterator<Item=&'a Edge> {
+        self.edges_iter_directed(node, petgraph::Direction::Incoming)
+    }
+
+    fn edges_iter_directed<'a>(&'a self, node: &Node, direction: petgraph::Direction) -> impl Iterator<Item=&'a Edge> {
+        self.graph.edges_directed(node.id, direction).map(move |(_a, _b, edge_ids)| {
+            edge_ids
+        })
+            .flatten()
+            .map(move |edge_id| {
+                self.edges.get(&edge_id).unwrap()
+            })
+    }
+
+    pub fn outgoing_neighbors<'a>(&'a self, node: &Node) -> impl Iterator<Item=&'a Node> {
+        self.nodes_iter_directed(node, petgraph::Direction::Outgoing)
+    }
+
+    pub fn incoming_neighbors<'a>(&'a self, node: &Node) -> impl Iterator<Item=&'a Node> {
+        self.nodes_iter_directed(node, petgraph::Direction::Incoming)
+    }
+
+    fn nodes_iter_directed<'a>(&'a self, node: &Node, direction: petgraph::Direction) -> impl Iterator<Item=&'a Node> {
+        self.graph.neighbors_directed(node.id, direction).map(move |node_id| {
+            self.nodes.get(&node_id).unwrap()
+        })
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, PartialOrd, Ord)]
@@ -75,6 +115,14 @@ impl GraphItemId {
     }
 }
 
+pub trait HasFrameId {
+    fn get_frame_id(&self) -> Option<FrameId>;
+}
+
+pub fn is_same_frame_context<A: HasFrameId, B: HasFrameId>(a: A, b: B) -> bool {
+    a.get_frame_id() == b.get_frame_id()
+}
+
 /// An identifier used to reference a node.
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, PartialOrd, Ord)]
 pub struct NodeId(GraphItemId);
@@ -91,9 +139,16 @@ impl NodeId {
     }
 }
 
+impl HasFrameId for NodeId {
+    fn get_frame_id(&self) -> Option<FrameId> {
+        self.0.frame_id
+    }
+}
+
 /// A node, representing a side effect of a page load.
 #[derive(Debug, Clone)]
 pub struct Node {
+    pub id: NodeId,
     pub node_timestamp: isize,
     pub node_type: NodeType,
 }
@@ -114,11 +169,26 @@ impl EdgeId {
     }
 }
 
+impl HasFrameId for EdgeId {
+    fn get_frame_id(&self) -> Option<FrameId> {
+        self.0.frame_id
+    }
+}
+
 /// An edge, representing an action taken during page load.
 #[derive(Debug, Clone)]
 pub struct Edge {
+    pub id: EdgeId,
     pub edge_timestamp: Option<isize>,
     pub edge_type: EdgeType,
+    pub source: NodeId,
+    pub target: NodeId,
+}
+
+impl PartialEq for Edge {
+    fn eq(&self, rhs: &Self) -> bool {
+        self.id == rhs.id
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, PartialOrd, Ord)]

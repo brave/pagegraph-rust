@@ -105,7 +105,7 @@ pub enum EdgeType {
     JsResult { value: Option<String> },
     JsCall {
         args: Option<String>,
-        script_position: usize
+        script_position: usize,
     },
     RequestComplete {
         resource_type: String,

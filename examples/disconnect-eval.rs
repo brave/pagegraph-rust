@@ -36,19 +36,19 @@ fn run_adblock_configuration(graph: &pagegraph::graph::PageGraph, engine: &adblo
             NodeType::Resource { url } => {
                 let request_types = graph.resource_request_types(id);
                 request_types.into_iter().for_each(|request_type| {
-                    let block_result = engine.check_network_urls(&url, &root_url, &request_type);
+                    let block_result = engine.check_network_urls(&url, &root_url, &request_type.0.as_str());
                     // If the resource matches without an exception, or with an exception and important
                     if block_result.matched && (block_result.exception.is_none() || block_result.important) {
                         // Get all downstream resources
                         let downstream_resources = graph.all_downstream_effects_of(&id);
                         // Flag this resource as blocked
-                        blocked_requests.insert((url.to_string(), request_type));
+                        blocked_requests.insert((url.to_string(), request_type.0.to_string()));
                         // Flag each of its downstream resources as blocked
                         downstream_resources.into_iter().for_each(|(id, node)| { match &node.node_type {
                             NodeType::Resource { url } => {
                                 let request_types = graph.resource_request_types(&id);
                                 request_types.into_iter().for_each(|request_type| {
-                                    blocked_requests.insert((url.to_string(), request_type));
+                                    blocked_requests.insert((url.to_string(), request_type.0.to_string()));
                                 });
                             }
                             _ => (),
