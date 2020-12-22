@@ -739,17 +739,25 @@ impl PageGraph {
         }
     }
 
+    /// Returns all actions that would not have occurred had the given action been omitted from the
+    /// original graph.
     pub fn all_downstream_effects_of<'a>(&'a self, edge: &'a Edge) -> Vec<&'a Edge> {
         let mut edges_to_check = vec![edge];
         let mut already_checked = vec![];
 
+        let original_edge = edge;
+
         while let Some(edge) = edges_to_check.pop() {
             let direct_effects = self.direct_downstream_effects_of(edge);
-            already_checked.push(edge);
+            if edge != original_edge {
+                already_checked.push(edge);
+            }
 
-            direct_effects.into_iter().for_each(|edge| if !already_checked.contains(&edge) {
-                edges_to_check.push(edge);
-            });
+            direct_effects.into_iter().for_each(|edge|
+                if !already_checked.contains(&edge) && edge != original_edge {
+                    edges_to_check.push(edge);
+                }
+            );
         }
 
         already_checked
