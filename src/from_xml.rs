@@ -392,7 +392,7 @@ fn build_edge<R: std::io::Read>(
     let edge_type_attr = &edge_type.as_ref().expect("couldn't find `edge type` attr on node")[..];
 
     let edge_type = types::EdgeType::construct(edge_type_attr, &mut data, key);
-    assert!(data.is_empty(), "extra data on node {:?}: {:?}", edge_type, data);
+    assert!(data.is_empty(), "extra data on edge {:?}: {:?}", edge_type, data);
 
     let id = id_value.expect("couldn't find `id` value on edge");
     let source = source_value.expect("couldn't find `source` value on edge");
@@ -652,6 +652,7 @@ impl KeyedAttrs for types::NodeType {
                 url: drain_opt_string!("url"),
                 script_type: drain_string!("script type"),
                 script_id: drain_usize!("script id"),
+                source: drain_string!("source"),
             },
             "parser" => Self::Parser {},
             "Brave Shields" => Self::BraveShields {},
@@ -660,6 +661,13 @@ impl KeyedAttrs for types::NodeType {
             "javascript shield" => Self::JavascriptShield {},
             "fingerprinting shield" => Self::FingerprintingShield {},
             "fingerprintingV2 shield" => Self::FingerprintingV2Shield {},
+            "binding" => Self::Binding {
+                binding: drain_string!("binding"),
+                binding_type: drain_string!("binding type"),
+            },
+            "binding event" => Self::BindingEvent {
+                binding_event: drain_string!("binding event"),
+            },
             _ => panic!("Unknown node type `{}`", type_str),
         }
     }
@@ -770,6 +778,10 @@ impl KeyedAttrs for types::EdgeType {
             "delete attribute" => Self::DeleteAttribute {
                 key: drain_string!("key"),
                 is_style: drain_bool!("is style"),
+            },
+            "binding" => Self::Binding {},
+            "binding event" => Self::BindingEvent {
+                script_position: drain_usize!("script position"),
             },
             _ => panic!("Unknown edge type `{}`", type_str),
         }

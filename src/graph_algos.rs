@@ -764,7 +764,9 @@ impl PageGraph {
                     _ => vec![],
                 }
             }
-            EdgeType::DeleteAttribute { .. } => unimplemented!()
+            EdgeType::DeleteAttribute { .. } => unimplemented!(),
+            EdgeType::Binding { .. } => unimplemented!(),
+            EdgeType::BindingEvent { .. } => unimplemented!(),
         }
     }
 
