@@ -363,12 +363,15 @@ fn build_edge<R: std::io::Read>(
                                 panic!("wrong edge id");
                             }
                         } else if key.get("timestamp").unwrap().id == data_item.key {
-                            edge_timestamp = Some(contained
-                                .trim_end_matches("0")
-                                .trim_end_matches(".")
-                                .parse::<isize>()
-                                .unwrap_or_default()
-                            );
+                            edge_timestamp = Some(if contained.contains('.') {
+                                contained.trim_end_matches('0')
+                                    .trim_end_matches('.')
+                                    .parse::<isize>()
+                                    .unwrap()
+                                } else {
+                                    contained.parse::<isize>()
+                                        .unwrap_or_default()
+                                });
                         } else {
                             data.insert(data_item.key, contained);
                         }
@@ -445,12 +448,15 @@ fn build_node<R: std::io::Read>(
                                 panic!("wrong node id");
                             }
                         } else if key.get("timestamp").unwrap().id == data_item.key {
-                            node_timestamp = Some(contained
-                                .trim_end_matches("0")
-                                .trim_end_matches(".")
-                                .parse::<isize>()
-                                .unwrap_or_default()
-                            );
+                            node_timestamp = Some(if contained.contains('.') {
+                                contained.trim_end_matches('0')
+                                    .trim_end_matches('.')
+                                    .parse::<isize>()
+                                    .unwrap()
+                                } else {
+                                    contained.parse::<isize>()
+                                        .unwrap_or_default()
+                                });
                         } else {
                             data.insert(data_item.key, contained);
                         }
