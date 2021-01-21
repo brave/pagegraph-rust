@@ -495,7 +495,7 @@ impl PageGraph {
                         let mut same_context_parsers = parsers
                             .iter()
                             .filter(|parser| {
-                                crate::graph::is_same_frame_context(edge.id, parser.id)
+                                crate::graph::is_same_frame_context(edge.target, parser.id)
                             });
                         let same_context_parser = same_context_parsers.next().expect("Frame context had no parsers");
                         assert!(same_context_parsers.next().is_none(), "Frame context had multiple parsers");
@@ -510,7 +510,7 @@ impl PageGraph {
                             // consider those as well.
                             .chain(self.nodes.values().filter(|node| {
                                 matches!(node.node_type, NodeType::DomRoot { .. }) &&
-                                    crate::graph::is_same_frame_context(node.id, edge.id) &&
+                                    crate::graph::is_same_frame_context(node.id, edge.target) &&
                                     self.incoming_edges(node)
                                         .filter(|edge| matches!(edge.edge_type, EdgeType::CreateNode {}))
                                         .next()
@@ -624,10 +624,39 @@ impl PageGraph {
             EdgeType::TextChange {} => unimplemented!(),
             EdgeType::RemoveNode {} => unimplemented!(),
             EdgeType::DeleteNode {} => unimplemented!(),
-            EdgeType::InsertNode { .. } => {
+            EdgeType::InsertNode { parent: parent_id, .. } => {
                 // Inserting a node can cause certain elements with `src` attributes to trigger a
                 // network request, however we use `SetAttribute` instead as a rough approximation
                 // of this.
+
+                // On the other hand, inserting a text node can trigger an inline script execution
+                // if its parent HTML node is a script tag. In that case, we attribute the
+                // chronologically next outgoing execute edge from the parent script as an effect
+                // of this insertion.
+                if let NodeType::TextNode { .. } = self.target_node(edge).node_type {
+                    let parent_node = {
+                        let mut parent_nodes = self.nodes.values().filter(|parent_node|
+                            crate::graph::is_same_frame_context(edge.id, parent_node.id) &&
+                            matches!(parent_node.node_type, NodeType::HtmlElement { node_id, .. } | NodeType::DomRoot { node_id, .. } | NodeType::FrameOwner { node_id, .. } if node_id == *parent_id)
+                        );
+                        let parent_node = parent_nodes.next().expect(&format!("No HTML parent node with id {} found for insertion {:?}", parent_id, edge));
+                        assert!(parent_nodes.next().is_none(), "Multiple HTML parent nodes with id {} found", parent_id);
+                        parent_node
+                    };
+
+                    match &parent_node.node_type {
+                        NodeType::HtmlElement { tag_name, .. } if tag_name == "script" => {
+                            let insertion_time = edge.edge_timestamp;
+                            let next_execution = self.outgoing_edges(parent_node)
+                                .filter(|edge| matches!(edge.edge_type, EdgeType::Execute {}) && edge.edge_timestamp >= insertion_time)
+                                .min_by_key(|edge| edge.edge_timestamp)
+                                .unwrap_or_else(|| panic!("No execution for inline script contents {:?}", self.target_node(edge)));
+                            return vec![next_execution];
+                        },
+                        _ => (),
+                    }
+                }
+
                 vec![]
             }
             EdgeType::CreateNode {} => {
