@@ -68,6 +68,7 @@ fn build_desc<R: std::io::Read>(
     let mut about = None;
     let mut url = None;
     let mut is_root = None;
+    let mut frame_id = None;
     let mut time = None;
 
     while let Ok(e) = parser.next() {
@@ -84,6 +85,7 @@ fn build_desc<R: std::io::Read>(
                     "about" => about = Some(parse_str_data(parser, attributes, local_name)),
                     "url" => url = Some(parse_str_data(parser, attributes, local_name)),
                     "is_root" => is_root = Some(parse_str_data(parser, attributes, local_name)),
+                    "frame_id" => frame_id = Some(parse_str_data(parser, attributes, local_name)),
                     "time" => time = Some(build_time(parser, attributes)),
                     o => panic!("unexpected {:?} in `{}`", o, STR_REP),
                 }
@@ -98,6 +100,7 @@ fn build_desc<R: std::io::Read>(
         about: about.unwrap(),
         url: url.unwrap(),
         is_root: is_root.unwrap().parse::<bool>().unwrap(),
+        frame_id: frame_id.unwrap().as_str().into(),
         time: time.unwrap(),
     }
 }

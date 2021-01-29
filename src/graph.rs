@@ -10,6 +10,7 @@ pub struct PageGraphDescriptor {
     pub about: String,
     pub url: String,
     pub is_root: bool,
+    pub frame_id: FrameId,
     pub time: PageGraphTime,
 }
 
