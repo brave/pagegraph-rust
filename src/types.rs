@@ -42,6 +42,7 @@ pub enum NodeType {
         url: Option<String>,
         script_type: String,
         script_id: usize,
+        source: String,
     },
     Parser {},
     BraveShields {},
@@ -50,6 +51,13 @@ pub enum NodeType {
     JavascriptShield {},
     FingerprintingShield {},
     FingerprintingV2Shield {},
+    Binding {
+        binding: String,
+        binding_type: String,
+    },
+    BindingEvent {
+        binding_event: String,
+    },
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -165,5 +173,9 @@ pub enum EdgeType {
     DeleteAttribute {
         key: String,
         is_style: bool,
+    },
+    Binding {},
+    BindingEvent {
+        script_position: usize,
     },
 }
