@@ -215,6 +215,7 @@ impl PageGraph {
                     // Prefetches and requests from CSS are initiated by the parser. We have no way
                     // to attribute those to particular DOM roots, so we ignore them for now.
                     NodeType::Parser { .. } => None,
+                    NodeType::DomRoot { .. } => Some(target),
                     _ => panic!("Request initiated by {:?} (something other than a script or HTML element)", &target),
                 }
             }
@@ -676,9 +677,17 @@ impl PageGraph {
                 let target = self.target_node(edge);
                 if resource_type == "script" && matches!(&target.node_type, NodeType::HtmlElement { tag_name, .. } if tag_name == "script") {
                     self.outgoing_edges(target).filter(|edge| matches!(edge.edge_type, EdgeType::Execute {})).collect::<Vec<_>>()
+                // If RequestComplete points to a DOM root node, then it's responsible for the
+                // entire downstream document.
+                } else if matches!(&target.node_type, NodeType::DomRoot { .. }) {
+                    // TODO technically this should attribute the document, but it used to be
+                    // missing from the graph. In the meantime, sizes of blocked subdocuments are
+                    // discovered as a special case from CrossDom edges externally.
+                    vec![]
                 } else {
                     vec![]
                 }
+
             }
             EdgeType::RequestError { .. } => {
                 // Request errors generally don't cause anything to happen.
