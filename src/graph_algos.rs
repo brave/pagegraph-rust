@@ -231,7 +231,7 @@ impl PageGraph {
                     NodeType::Script { .. } => {
                         // Scripts generally are pointed to by a single Execute edge, but there can
                         // be more than one for multiple script elements with the same source.
-                        let dom_roots = self.incoming_edges(self.target_node(edge))
+                        let dom_roots = self.incoming_edges(source)
                             .filter(|edge| matches!(edge.edge_type, EdgeType::Execute {}))
                             .map(|edge| self.dom_root_for_edge(edge).unwrap())
                             .collect::<Vec<_>>();
@@ -649,9 +649,14 @@ impl PageGraph {
                             let insertion_time = edge.edge_timestamp;
                             let next_execution = self.outgoing_edges(parent_node)
                                 .filter(|edge| matches!(edge.edge_type, EdgeType::Execute {}) && edge.edge_timestamp >= insertion_time)
-                                .min_by_key(|edge| edge.edge_timestamp)
-                                .unwrap_or_else(|| panic!("No execution for inline script contents {:?}", self.target_node(edge)));
-                            return vec![next_execution];
+                                .min_by_key(|edge| edge.edge_timestamp);
+                            // Some script elements are not executed, e.g.
+                            // `<script type="application/json">`.
+                            // This is fine.
+                            return match next_execution {
+                                Some(next_execution) => vec![next_execution],
+                                None => vec![],
+                            };
                         },
                         _ => (),
                     }
