@@ -192,7 +192,7 @@ impl PartialEq for Edge {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, PartialOrd, Ord)]
+#[derive(PartialEq, Eq, Hash, Clone, Copy, PartialOrd, Ord)]
 pub struct FrameId(u128);
 
 impl From<&str> for FrameId {
@@ -205,6 +205,12 @@ impl From<&str> for FrameId {
 
 impl std::fmt::Display for FrameId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:X}", self.0)
+        write!(f, "{:0>32X}", self.0)
+    }
+}
+
+impl std::fmt::Debug for FrameId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "\"{:0>32X}\"", self.0)
     }
 }
