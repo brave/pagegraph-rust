@@ -801,6 +801,9 @@ impl PageGraph {
 }
 
 fn get_domain(host: &str) -> String {
+    if let "localhost" = host {
+        return host.to_string();
+    }
     let source_hostname = host;
     let source_domain = source_hostname.parse::<addr::DomainName>().expect("Source URL domain could not be parsed");
     let source_domain = &source_hostname[source_hostname.len() - source_domain.root().to_str().len()..];
