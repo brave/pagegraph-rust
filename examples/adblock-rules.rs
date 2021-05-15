@@ -35,7 +35,7 @@ fn main() {
         matches!(&matching_element.node_type, NodeType::Resource { .. })
     }).map(|(node_id, resource_node)| {
         let requests = graph.incoming_edges(resource_node).filter_map(|edge| if let EdgeType::RequestStart { request_id, .. } = &edge.edge_type {
-            Some((*request_id, format!("{:?}", edge.id)))
+            Some((*request_id, format!("{}", edge.id)))
         } else {
             None
         }).collect::<Vec<_>>();
@@ -45,7 +45,7 @@ fn main() {
         if let NodeType::Resource { url } = &resource_node.node_type {
             MatchingResource {
                 url: url.clone(),
-                node_id: format!("{:?}", node_id),
+                node_id: format!("{}", node_id),
                 request_types,
                 requests,
             }
