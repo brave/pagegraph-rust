@@ -38,13 +38,14 @@ pub fn main(graph: &PageGraph, request_id_arg: usize, frame_id: Option<FrameId>)
         if edge_id.get_frame_id() != frame_id {
             return;
         }
+        // There can be multiple request start and complete edges for the same request id, if they
+        // represent requests to the same cached resource. However, the information retrieved here
+        // should be identical, so we can use any matching edge.
         match &e.edge_type {
             EdgeType::RequestStart { request_id, .. } if *request_id == request_id_arg => {
-                assert!(start_edge.is_none(), "multiple RequestStart edges for request id");
                 start_edge = Some(e);
             }
             EdgeType::RequestComplete { request_id, .. } if *request_id == request_id_arg => {
-                assert!(start_edge.is_none(), "multiple RequestComplete edges for request id");
                 complete_edge = Some(e);
             }
             _ => (),
