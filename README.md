@@ -2,6 +2,12 @@
 
 This crate provides utilities for analyzing PageGraph outputs.
 
+## Workspace organization
+
+`pagegraph` provides a core library for interacting directly with pagegraph files and building custom extraction tools.
+
+`pagegraph-cli` provides a more convenient, no-code wrapper around common operations, supplying outputs in easily-parseable formats.
+
 ## Example
 
 The following example reads from a PageGraph file and produces all deleted
@@ -21,5 +27,4 @@ fn main() {
         }
     });
 }
-
 ```

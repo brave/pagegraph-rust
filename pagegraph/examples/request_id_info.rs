@@ -36,7 +36,7 @@ fn main() {
 
     let mut args = std::env::args().skip(1);
     let graph_file = args.next().expect("Provide a path to a `.graphml` file");
-    let id_arg = args.next().expect("Provide a request id, optionally followed by a frame id").parse::<usize>().expect("Edge id should be parseable as a number");
+    let id_arg = args.next().expect("Provide a request id, optionally followed by a frame id").parse::<usize>().expect("Request id should be parseable as a number");
     let frame_id = args.next().map(|frame_id_str| FrameId::try_from(frame_id_str.as_str()).expect("Frame id should be parseable"));
 
     let mut graph = read_from_file(&graph_file);
