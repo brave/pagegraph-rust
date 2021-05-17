@@ -100,7 +100,7 @@ fn build_desc<R: std::io::Read>(
         about: about.unwrap(),
         url: url.unwrap(),
         is_root: is_root.unwrap().parse::<bool>().unwrap(),
-        frame_id: frame_id.unwrap().as_str().into(),
+        frame_id: graph::FrameId::try_from(frame_id.unwrap().as_str()).unwrap(),
         time: time.unwrap(),
     }
 }
@@ -610,7 +610,7 @@ impl KeyedAttrs for types::NodeType {
         match type_str {
             "extensions" => Self::Extensions {},
             "remote frame" => Self::RemoteFrame {
-                frame_id: graph::FrameId::from(&drain_string!("frame id") as &str)
+                frame_id: graph::FrameId::try_from(&drain_string!("frame id") as &str).unwrap()
             },
             "resource" => Self::Resource {
                 url: drain_string!("url")
