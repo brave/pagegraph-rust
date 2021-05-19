@@ -1,26 +1,9 @@
 //! Given an adblock network rule, prints out the nodes for resources that match that rule.
 
-use pagegraph::from_xml::read_from_file;
+use pagegraph::graph::PageGraph;
 use pagegraph::types::{EdgeType, NodeType};
 
-fn main() {
-    let mut args = std::env::args().skip(1);
-    let graph_file = args.next().expect("Provide a path to a `.graphml` file");
-    let filter_rule = args.next().expect("Provide a network filter rule");
-
-    let mut graph = read_from_file(&graph_file);
-
-    graph.all_remote_frame_ids().into_iter().for_each(|remote_frame_id| {
-        let mut frame_path = std::path::Path::new(&graph_file).to_path_buf();
-        frame_path.set_file_name(format!("page_graph_{}.0.graphml", remote_frame_id));
-        if !frame_path.exists() {
-            // We have to just ignore the remote frame's contents if we couldn't successfully record any.
-            return;
-        }
-        let frame_graph = read_from_file(frame_path.to_str().expect("failed to convert frame path to a string"));
-        graph.merge_frame(frame_graph, &remote_frame_id);
-    });
-
+pub fn main(graph: &PageGraph, filter_rule: &str) {
     let matching_elements = graph.resources_matching_filter(&filter_rule);
 
     #[derive(serde::Serialize)]

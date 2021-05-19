@@ -1,9 +1,6 @@
 //! Prints out all info from the graph about the given request ID.
 
-use std::convert::TryFrom;
-
-use pagegraph::from_xml::read_from_file;
-use pagegraph::{graph::{Edge, FrameId, HasFrameId}, types::{EdgeType, NodeType, RequestType}};
+use pagegraph::{graph::{Edge, FrameId, HasFrameId, PageGraph}, types::{EdgeType, NodeType, RequestType}};
 
 /// Custom serializer for `RequestType`, so that `RequestInfo` can hold it directly rather than a
 /// string representation.
@@ -12,7 +9,7 @@ where S: serde::Serializer {
     serializer.serialize_str(request_type.as_str())
 }
 
-fn main() {
+pub fn main(graph: &PageGraph, request_id_arg: usize, frame_id: Option<FrameId>) {
     #[derive(serde::Serialize)]
     struct RequestInfo {
         // RequestStart
@@ -34,24 +31,6 @@ fn main() {
         size: String,
     }
 
-    let mut args = std::env::args().skip(1);
-    let graph_file = args.next().expect("Provide a path to a `.graphml` file");
-    let id_arg = args.next().expect("Provide a request id, optionally followed by a frame id").parse::<usize>().expect("Edge id should be parseable as a number");
-    let frame_id = args.next().map(|frame_id_str| FrameId::try_from(frame_id_str.as_str()).expect("Frame id should be parseable"));
-
-    let mut graph = read_from_file(&graph_file);
-
-    graph.all_remote_frame_ids().into_iter().for_each(|remote_frame_id| {
-        let mut frame_path = std::path::Path::new(&graph_file).to_path_buf();
-        frame_path.set_file_name(format!("page_graph_{}.0.graphml", remote_frame_id));
-        if !frame_path.exists() {
-            // We have to just ignore the remote frame's contents if we couldn't successfully record any.
-            return;
-        }
-        let frame_graph = read_from_file(frame_path.to_str().expect("failed to convert frame path to a string"));
-        graph.merge_frame(frame_graph, &remote_frame_id);
-    });
-
     let mut start_edge: Option<&Edge> = None;
     let mut complete_edge: Option<&Edge> = None;
 
@@ -59,13 +38,14 @@ fn main() {
         if edge_id.get_frame_id() != frame_id {
             return;
         }
+        // There can be multiple request start and complete edges for the same request id, if they
+        // represent requests to the same cached resource. However, the information retrieved here
+        // should be identical, so we can use any matching edge.
         match &e.edge_type {
-            EdgeType::RequestStart { request_id, .. } if *request_id == id_arg => {
-                assert!(start_edge.is_none(), "multiple RequestStart edges for request id");
+            EdgeType::RequestStart { request_id, .. } if *request_id == request_id_arg => {
                 start_edge = Some(e);
             }
-            EdgeType::RequestComplete { request_id, .. } if *request_id == id_arg => {
-                assert!(start_edge.is_none(), "multiple RequestComplete edges for request id");
+            EdgeType::RequestComplete { request_id, .. } if *request_id == request_id_arg => {
                 complete_edge = Some(e);
             }
             _ => (),
