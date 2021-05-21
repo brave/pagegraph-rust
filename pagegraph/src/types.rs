@@ -61,6 +61,7 @@ pub enum NodeType {
 }
 
 #[derive(Clone, PartialEq, Debug)]
+#[derive(serde::Serialize)]
 pub enum RequestType {
     Image,
     ScriptClassic,
@@ -96,6 +97,7 @@ impl RequestType {
 
 /// Represents the type of any PageGraph edge, along with any associated type-specific data.
 #[derive(Clone, PartialEq, Debug)]
+#[derive(serde::Serialize)]
 pub enum EdgeType {
     Filter {},
     Structure {},

@@ -3,7 +3,7 @@ use std::convert::TryFrom;
 
 use petgraph::graphmap::DiGraphMap;
 
-use crate::types::{ NodeType, EdgeType };
+use crate::types::{NodeType, EdgeType, RequestType};
 
 #[derive(Debug)]
 pub struct PageGraphDescriptor {
@@ -93,7 +93,7 @@ impl PageGraph {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, PartialOrd, Ord)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, PartialOrd, Ord, serde::Serialize)]
 struct GraphItemId {
     id: usize,
     frame_id: Option<FrameId>,
@@ -143,7 +143,7 @@ pub fn is_same_frame_context<A: HasFrameId, B: HasFrameId>(a: A, b: B) -> bool {
 }
 
 /// An identifier used to reference a node.
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, PartialOrd, Ord)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, PartialOrd, Ord, serde::Serialize)]
 pub struct NodeId(GraphItemId);
 
 impl From<usize> for NodeId {
@@ -186,6 +186,16 @@ impl TryFrom<&str> for NodeId {
     }
 }
 
+/// Downstream requests tree
+#[derive(serde::Serialize)]
+pub struct DownstreamRequests {
+    pub request_id: usize,
+    pub url: String,
+    pub request_type: RequestType,
+    pub node_id: NodeId,
+    pub children: Vec<DownstreamRequests>,
+}
+
 /// A node, representing a side effect of a page load.
 #[derive(Debug, Clone)]
 pub struct Node {
@@ -195,7 +205,7 @@ pub struct Node {
 }
 
 /// An identifier used to reference an edge.
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, PartialOrd, Ord)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, PartialOrd, Ord, serde::Serialize)]
 pub struct EdgeId(GraphItemId);
 
 impl From<usize> for EdgeId {
@@ -252,7 +262,7 @@ impl std::fmt::Display for EdgeId {
 }
 
 /// An edge, representing an action taken during page load.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct Edge {
     pub id: EdgeId,
     pub edge_timestamp: Option<isize>,
@@ -267,7 +277,7 @@ impl PartialEq for Edge {
     }
 }
 
-#[derive(PartialEq, Eq, Hash, Clone, Copy, PartialOrd, Ord)]
+#[derive(PartialEq, Eq, Hash, Clone, Copy, PartialOrd, Ord, serde::Serialize)]
 pub struct FrameId(u128);
 
 impl TryFrom<&str> for FrameId {

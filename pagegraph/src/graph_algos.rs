@@ -1,4 +1,4 @@
-use crate::graph::{ PageGraph, Edge, EdgeId, Node, NodeId, FrameId };
+use crate::graph::{PageGraph, Edge, EdgeId, Node, NodeId, FrameId, DownstreamRequests};
 use crate::types::{ EdgeType, NodeType };
 
 use petgraph::Direction;
@@ -797,6 +797,44 @@ impl PageGraph {
         }
 
         already_checked
+    }
+
+    /// Returns all requests that would not have occurred had the given Request Start edge been
+    /// omitted
+    pub fn all_downstream_requests_nested<'a>(&'a self, edge: &'a Edge) -> Vec<DownstreamRequests> {
+        let mut edges_to_check = vec![edge];
+        let mut already_checked = vec![];
+        let mut answer = vec![];
+
+        let original_edge = edge;
+
+        while let Some(edge) = edges_to_check.pop() {
+            let direct_effects = self.direct_downstream_effects_of(edge);
+            if edge != original_edge {
+                already_checked.push(edge);
+            }
+
+            direct_effects.into_iter().for_each(|edge|
+                if let EdgeType::RequestStart { request_id, request_type, .. } = &edge.edge_type {
+                    let node = self.target_node(edge);
+                    let url = match &node.node_type {
+                        NodeType::Resource { url } => url,
+                        _ => unreachable!()
+                    };
+                    let downstream_req = DownstreamRequests {
+                        request_id: request_id.clone(),
+                        request_type: request_type.clone(),
+                        node_id: node.id,
+                        url: url.to_string(),
+                        children: self.all_downstream_requests_nested(edge)
+                    };
+                    answer.push(downstream_req)
+                } else if !already_checked.contains(&edge) && edge != original_edge {
+                    edges_to_check.push(edge);
+                }
+            );
+        }
+        answer
     }
 }
 
