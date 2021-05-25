@@ -24,7 +24,7 @@ pub fn main(graph: &PageGraph, request_id_arg: usize, frame_id: Option<FrameId>)
         // RequestComplete
         resource_type: String,
         status: String,
-        value: Option<String>,
+        source: String,
         response_hash: Option<String>,
         //request_id: usize,
         headers: String,
@@ -60,17 +60,31 @@ pub fn main(graph: &PageGraph, request_id_arg: usize, frame_id: Option<FrameId>)
 
     assert_eq!(start_target.id, complete_source.id, "RequestStart and RequestComplete do not refer to the same Resource");
 
-    let request_info = if let EdgeType::RequestComplete { resource_type, status, value, response_hash, headers, size, .. } = &complete_edge.edge_type {
+    // If the request corresponds to a script:
+    // 1. Get the source node for RequestStart that corresponds to request ID
+    // 2. Get the Execute edge for that node
+    // 3. Get the target node for the Execute edge, and get the source in that node.
+    let start_source = graph.source_node(start_edge);
+    let execute_edge = graph.outgoing_edges(start_source)
+        .filter(|edge| matches!(edge.edge_type, EdgeType::Execute {})).nth(0);
+    let script_node = execute_edge.map(|x| graph.target_node(x));
+
+    let request_info = if let EdgeType::RequestComplete { resource_type, status, response_hash, headers, size, .. } = &complete_edge.edge_type {
         if let EdgeType::RequestStart { request_type, .. } = &start_edge.edge_type {
             if let NodeType::Resource { url } = &start_target.node_type {
+                let source = script_node.map(|script_node| {
+                    if let NodeType::Script { source, .. } = &script_node.node_type {
+                        source.clone()
+                    } else {
+                        unreachable!()
+                    }
+                }).expect("Only handle requests for scripts for now");
                 RequestInfo {
                     request_type: request_type.clone(),
-
                     url: url.clone(),
-
                     resource_type: resource_type.clone(),
                     status: status.clone(),
-                    value: value.clone(),
+                    source,
                     response_hash: response_hash.clone(),
                     headers: headers.clone(),
                     size: size.clone(),
