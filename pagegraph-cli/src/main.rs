@@ -45,6 +45,12 @@ fn main() {
                 .takes_value(true)
                 .value_name("REQUEST")
                 .required(true))
+            .arg(Arg::with_name("source")
+                .help("Print just the escaped source")
+                .takes_value(false)
+                .short("s")
+                .long("source")
+                .required(false))
             .arg(Arg::with_name("frame_id")
                 .help("Optional frame id that the request id is associated with, defaults to the root frame")
                 .takes_value(true)
@@ -121,7 +127,8 @@ fn main() {
     } else if let Some(matches) = matches.subcommand_matches("request_id_info") {
         use std::convert::TryFrom;
         let request_id = matches.value_of("request_id").unwrap().parse::<usize>().expect("Request id should be parseable as a number");
+        let just_source = matches.is_present("source");
         let frame_id: Option<FrameId> = matches.value_of("frame_id").map(|frame_id_str| FrameId::try_from(frame_id_str).expect("Frame id should be parseable"));
-        request_id_info::main(&graph, request_id, frame_id);
+        request_id_info::main(&graph, request_id, frame_id, just_source);
     }
 }
