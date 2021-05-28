@@ -9,7 +9,7 @@ where S: serde::Serializer {
     serializer.serialize_str(request_type.as_str())
 }
 
-pub fn main(graph: &PageGraph, request_id_arg: usize, frame_id: Option<FrameId>) {
+pub fn main(graph: &PageGraph, request_id_arg: usize, frame_id: Option<FrameId>, just_source: bool) {
     #[derive(serde::Serialize)]
     struct RequestInfo {
         // RequestStart
@@ -99,5 +99,9 @@ pub fn main(graph: &PageGraph, request_id_arg: usize, frame_id: Option<FrameId>)
         unreachable!()
     };
 
-    println!("{}", serde_json::to_string(&request_info).unwrap());
+    if just_source {
+        println!("{}", html_escape::decode_html_entities(&request_info.source));
+    } else {
+        println!("{}", serde_json::to_string(&request_info).unwrap());
+    }
 }
