@@ -28,11 +28,24 @@ fn main() {
             .about("Find network requests matching a given adblock rule")
             .arg(Arg::with_name("filter_rule")
                 .help("Adblock rule to use, using ABP syntax")
+                .short("r")
+                .long("rule")
                 .takes_value(true)
-                .value_name("RULE")
-                .required(true)))
+                .required_unless("path_to_filterlist"))
+            .arg(Arg::with_name("path_to_filterlist")
+                .short("l")
+                .long("list")
+                .required_unless("filter_rule")
+                .help("Set path to filterlist file (newline-separated adblock rules) to use")
+                .takes_value(true)))
         .subcommand(SubCommand::with_name("downstream_requests")
             .about("Find network requests initiated as a result of a given edge in the graph")
+            .arg(Arg::with_name("requests")
+                .help("Get just the list of downstream resource IDs")
+                .takes_value(false)
+                .short("r")
+                .long("requests")
+                .required(false))
             .arg(Arg::with_name("edge_id")
                 .help("Edge id to check downstream requests for")
                 .takes_value(true)
@@ -118,12 +131,14 @@ fn main() {
             println!("No node or edge with id {} was found in this graph.", id);
         }
     } else if let Some(matches) = matches.subcommand_matches("adblock_rules") {
-        let rule = matches.value_of("filter_rule").unwrap();
-        adblock_rules::main(&graph, rule);
+        let rule = matches.value_of("filter_rule");
+        let filterlist = matches.value_of("path_to_filterlist");
+        adblock_rules::main(&graph, rule, filterlist);
     } else if let Some(matches) = matches.subcommand_matches("downstream_requests") {
         use std::convert::TryFrom;
+        let just_requests = matches.is_present("requests");
         let edge_id = EdgeId::try_from(matches.value_of("edge_id").unwrap()).expect("Provided edge id was invalid");
-        downstream_requests::main(&graph, edge_id);
+        downstream_requests::main(&graph, edge_id, just_requests);
     } else if let Some(matches) = matches.subcommand_matches("request_id_info") {
         use std::convert::TryFrom;
         let request_id = matches.value_of("request_id").unwrap().parse::<usize>().expect("Request id should be parseable as a number");
@@ -132,3 +147,4 @@ fn main() {
         request_id_info::main(&graph, request_id, frame_id, just_source);
     }
 }
+

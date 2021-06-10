@@ -2,9 +2,27 @@
 
 use pagegraph::graph::PageGraph;
 use pagegraph::types::{EdgeType, NodeType};
+use std::fs::File;
+use std::io::{BufReader, BufRead};
 
-pub fn main(graph: &PageGraph, filter_rule: &str) {
-    let matching_elements = graph.resources_matching_filter(&filter_rule);
+pub fn main(graph: &PageGraph, filter_rule: Option<&str>, filter_list_path: Option<&str>) {
+    // Check which one is defined
+    let filter_rules = if let Some(rule) = filter_rule {
+        vec![rule.to_string()]
+    } else {
+        // open file
+        let file = File::open(filter_list_path
+            .expect("At least one of path_to_filterlist or filter_rule must be defined")).unwrap();
+        let reader = BufReader::new(file);
+        let rules: Vec<_> = reader.lines()
+            .map(|l| l.expect("Could not parse line"))
+            .collect();
+        rules
+    };
+    let mut matching_elements = vec![];
+    for filter_rule in &filter_rules {
+        matching_elements.extend(graph.resources_matching_filter(&filter_rule));
+    }
 
     #[derive(serde::Serialize)]
     struct MatchingResource {
