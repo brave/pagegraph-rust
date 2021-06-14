@@ -4,6 +4,8 @@ use pagegraph::from_xml::read_from_file;
 use pagegraph::graph::{EdgeId, FrameId};
 
 use clap::{App, Arg, SubCommand};
+use std::fs::File;
+use std::io::{BufReader, BufRead};
 
 mod adblock_rules;
 mod request_id_info;
@@ -133,7 +135,19 @@ fn main() {
     } else if let Some(matches) = matches.subcommand_matches("adblock_rules") {
         let rule = matches.value_of("filter_rule");
         let filterlist = matches.value_of("path_to_filterlist");
-        adblock_rules::main(&graph, rule, filterlist);
+        let filter_rules = if let Some(rule) = rule {
+            vec![rule.to_string()]
+        } else {
+            // open file
+            let file = File::open(filterlist
+                .expect("At least one of path_to_filterlist or filter_rule must be defined")).unwrap();
+            let reader = BufReader::new(file);
+            let rules: Vec<_> = reader.lines()
+                .map(|l| l.expect("Could not parse line"))
+                .collect();
+            rules
+        };
+        adblock_rules::main(&graph, filter_rules);
     } else if let Some(matches) = matches.subcommand_matches("downstream_requests") {
         use std::convert::TryFrom;
         let just_requests = matches.is_present("requests");
@@ -147,4 +161,3 @@ fn main() {
         request_id_info::main(&graph, request_id, frame_id, just_source);
     }
 }
-

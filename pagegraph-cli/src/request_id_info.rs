@@ -1,7 +1,6 @@
 //! Prints out all info from the graph about the given request ID.
 
 use pagegraph::{graph::{Edge, FrameId, HasFrameId, PageGraph}, types::{EdgeType, NodeType, RequestType}};
-use std::process;
 
 /// Custom serializer for `RequestType`, so that `RequestInfo` can hold it directly rather than a
 /// string representation.
@@ -75,7 +74,7 @@ pub fn main(graph: &PageGraph, request_id_arg: usize, frame_id: Option<FrameId>,
         if let EdgeType::RequestStart { request_type, .. } = &start_edge.edge_type {
             if let NodeType::Resource { url } = &start_target.node_type {
                 let source = match script_node {
-                    None => process::exit(1), // fail silently
+                    None => panic!("Request ID does not correspond to a script!"), // fail
                     Some(script_node) => {
                         if let NodeType::Script { source, .. } = &script_node.node_type {
                             source.clone()
