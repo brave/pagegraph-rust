@@ -2,6 +2,7 @@ use crate::graph::{PageGraph, Edge, EdgeId, Node, NodeId, FrameId, DownstreamReq
 use crate::types::{ EdgeType, NodeType };
 
 use petgraph::Direction;
+use adblock::engine::Engine;
 
 const CAN_HAVE_SRC: [&str; 9] = ["audio", "embed", "iframe", "img", "input", "script", "source", "track", "video"];
 
@@ -431,51 +432,53 @@ impl PageGraph {
         }
     }
 
-    /// Get a collection of all Resource nodes whose requests match a given adblock filter pattern.
-    pub fn resources_matching_filter(&self, pattern: &str) -> Vec<(NodeId, &Node)> {
+    /// Get a collection of all Resource nodes whose requests match a set of adblock filter patterns.
+    pub fn resources_matching_filters(&self, patterns: Vec<String>) -> Vec<(NodeId, &Node)> {
         let source_url = self.root_url();
 
         let source_url = url::Url::parse(&source_url).expect("Could not parse source URL");
         let source_hostname = source_url.host_str().expect(&format!("Source URL has no host, {:?}", source_url));
         let source_domain = get_domain(source_hostname);
+        let blocker = Engine::from_rules(&patterns);
 
-        if let Ok(rule) = adblock::filters::network::NetworkFilter::parse(pattern, false) {
-            self.nodes
-                .iter()
-                .filter(|(id, node)| match &node.node_type {
-                    NodeType::Resource { url } => {
-                        use adblock::filters::network::NetworkMatchable as _;
+        self.nodes
+            .iter()
+            .filter(|(id, node)| match &node.node_type {
+                NodeType::Resource { url } => {
+                    let request_url = match url::Url::parse(url) {
+                        Ok(request_url) => request_url,
+                        Err(_) => return false,
+                    };
+                    let request_url_hostname = match request_url.host_str() {
+                        Some(host) => host,
+                        None => return false,
+                    };
+                    let request_url_domain = get_domain(request_url_hostname);
 
-                        let request_url = match url::Url::parse(url) {
-                            Ok(request_url) => request_url,
-                            Err(_) => return false,
+                    let request_types = self.resource_request_types(id);
+
+                    request_types.iter().map(|(request_type, _size)|  {
+                        let third_party = if source_domain.is_empty() {
+                            None
+                        } else {
+                            Some(source_domain != request_url_domain)
                         };
-                        let request_url_scheme = request_url.scheme();
-                        let request_url_hostname = match request_url.host_str() {
-                            Some(host) => host,
-                            None => return false,
-                        };
-                        let request_url_domain = get_domain(request_url_hostname);
+                        blocker
+                            .check_network_urls_with_hostnames(url, request_url_hostname,
+                                                               source_hostname,
+                                                               request_type,
+                                                               third_party).matched
+                    }).any(|matched| matched)
+                }
+                _ => false
+            })
+            .map(|(id, node)| (id.clone(), node))
+            .collect()
+    }
 
-                        let request_types = self.resource_request_types(id);
-
-                        request_types.iter().map(|(request_type, _size)| rule.matches(&adblock::request::Request::new(
-                            request_type,
-                            url,
-                            request_url_scheme,
-                            request_url_hostname,
-                            &request_url_domain,
-                            source_hostname,
-                            &source_domain,
-                        ))).any(|matched| matched)
-                    }
-                    _ => false
-                })
-                .map(|(id, node)| (id.clone(), node))
-                .collect()
-        } else {
-            vec![]
-        }
+    /// Get a collection of all Resource nodes whose requests match a given adblock filter pattern.
+    pub fn resources_matching_filter(&self, pattern: &str) -> Vec<(NodeId, &Node)> {
+        return self.resources_matching_filters(vec![pattern.to_string()]);
     }
 
     pub fn direct_downstream_effects_of(&self, edge: &Edge) -> Vec<&Edge>{

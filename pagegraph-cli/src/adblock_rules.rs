@@ -4,10 +4,7 @@ use pagegraph::graph::PageGraph;
 use pagegraph::types::{EdgeType, NodeType};
 
 pub fn main(graph: &PageGraph, filter_rules: Vec<String>) {
-    let mut matching_elements = vec![];
-    for filter_rule in &filter_rules {
-        matching_elements.extend(graph.resources_matching_filter(&filter_rule));
-    }
+    let matching_elements = graph.resources_matching_filters(filter_rules);
 
     #[derive(serde::Serialize)]
     struct MatchingResource {
