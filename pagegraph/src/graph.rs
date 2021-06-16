@@ -197,7 +197,7 @@ pub struct DownstreamRequests {
 }
 
 /// A node, representing a side effect of a page load.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct Node {
     pub id: NodeId,
     pub node_timestamp: isize,

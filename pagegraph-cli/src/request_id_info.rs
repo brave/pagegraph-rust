@@ -68,17 +68,21 @@ pub fn main(graph: &PageGraph, request_id_arg: usize, frame_id: Option<FrameId>,
     let execute_edge = graph.outgoing_edges(start_source)
         .filter(|edge| matches!(edge.edge_type, EdgeType::Execute {})).nth(0);
     let script_node = execute_edge.map(|x| graph.target_node(x));
+    // If the node is not a script node, then fail silently
 
     let request_info = if let EdgeType::RequestComplete { resource_type, status, response_hash, headers, size, .. } = &complete_edge.edge_type {
         if let EdgeType::RequestStart { request_type, .. } = &start_edge.edge_type {
             if let NodeType::Resource { url } = &start_target.node_type {
-                let source = script_node.map(|script_node| {
-                    if let NodeType::Script { source, .. } = &script_node.node_type {
-                        source.clone()
-                    } else {
-                        unreachable!()
+                let source = match script_node {
+                    None => panic!("Request ID does not correspond to a script!"), // fail
+                    Some(script_node) => {
+                        if let NodeType::Script { source, .. } = &script_node.node_type {
+                            source.clone()
+                        } else {
+                            unreachable!()
+                        }
                     }
-                }).expect("Only handle requests for scripts for now");
+                };
                 RequestInfo {
                     request_type: request_type.clone(),
                     url: url.clone(),
