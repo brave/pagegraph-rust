@@ -3,8 +3,8 @@
 use pagegraph::graph::PageGraph;
 use pagegraph::types::{EdgeType, NodeType};
 
-pub fn main(graph: &PageGraph, filter_rules: Vec<String>) {
-    let matching_elements = graph.resources_matching_filters(filter_rules);
+pub fn main(graph: &PageGraph, filter_rules: Vec<String>, only_exceptions: bool) {
+    let matching_elements = graph.resources_matching_filters(filter_rules, only_exceptions);
 
     #[derive(serde::Serialize)]
     struct MatchingResource {
