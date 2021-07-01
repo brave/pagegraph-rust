@@ -465,10 +465,13 @@ impl PageGraph {
                             Some(source_domain != request_url_domain)
                         };
                         let blocker_result = blocker
-                            .check_network_urls_with_hostnames(url, request_url_hostname,
-                                                               source_hostname,
-                                                               request_type,
-                                                               third_party);
+                            .check_network_urls_with_hostnames_subset(url,
+                                                                      request_url_hostname,
+                                                                      source_hostname,
+                                                                      request_type,
+                                                                      third_party,
+                                                                      false,
+                                                                      true);
                         if only_exceptions {
                             blocker_result.exception.is_some()
                         } else {
