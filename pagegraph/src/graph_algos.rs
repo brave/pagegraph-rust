@@ -433,7 +433,8 @@ impl PageGraph {
     }
 
     /// Get a collection of all Resource nodes whose requests match a set of adblock filter patterns.
-    pub fn resources_matching_filters(&self, patterns: Vec<String>) -> Vec<(NodeId, &Node)> {
+    /// Optionally, only match on exception patterns
+    pub fn resources_matching_filters(&self, patterns: Vec<String>, only_exceptions: bool) -> Vec<(NodeId, &Node)> {
         let source_url = self.root_url();
 
         let source_url = url::Url::parse(&source_url).expect("Could not parse source URL");
@@ -463,11 +464,19 @@ impl PageGraph {
                         } else {
                             Some(source_domain != request_url_domain)
                         };
-                        blocker
-                            .check_network_urls_with_hostnames(url, request_url_hostname,
-                                                               source_hostname,
-                                                               request_type,
-                                                               third_party).matched
+                        let blocker_result = blocker
+                            .check_network_urls_with_hostnames_subset(url,
+                                                                      request_url_hostname,
+                                                                      source_hostname,
+                                                                      request_type,
+                                                                      third_party,
+                                                                      false,
+                                                                      true);
+                        if only_exceptions {
+                            blocker_result.exception.is_some()
+                        } else {
+                            blocker_result.matched
+                        }
                     }).any(|matched| matched)
                 }
                 _ => false
@@ -477,8 +486,9 @@ impl PageGraph {
     }
 
     /// Get a collection of all Resource nodes whose requests match a given adblock filter pattern.
-    pub fn resources_matching_filter(&self, pattern: &str) -> Vec<(NodeId, &Node)> {
-        return self.resources_matching_filters(vec![pattern.to_string()]);
+    /// Optionally, only match on exception patterns
+    pub fn resources_matching_filter(&self, pattern: &str, only_exceptions: bool) -> Vec<(NodeId, &Node)> {
+        return self.resources_matching_filters(vec![pattern.to_string()], only_exceptions);
     }
 
     pub fn direct_downstream_effects_of(&self, edge: &Edge) -> Vec<&Edge>{
