@@ -1,10 +1,26 @@
 use crate::graph::{PageGraph, Edge, EdgeId, Node, NodeId, FrameId, DownstreamRequests};
-use crate::types::{ EdgeType, NodeType };
+use crate::types::{EdgeType, NodeType};
 
 use petgraph::Direction;
 use adblock::engine::Engine;
 
 const CAN_HAVE_SRC: [&str; 9] = ["audio", "embed", "iframe", "img", "input", "script", "source", "track", "video"];
+
+#[derive(serde::Serialize)]
+pub struct MatchedResource {
+    url: String,
+    node_id: String,
+    request_types: Vec<String>,
+    requests: Vec<MatchedRequest>,
+}
+
+#[derive(serde::Serialize)]
+struct MatchedRequest {
+    request_id: usize,
+    edge_id: String,
+    blocking_filter: Option<String>,
+    exception_filter: Option<String>
+}
 
 impl PageGraph {
     pub fn all_remote_frame_ids(&self) -> Vec<FrameId> {
@@ -433,32 +449,30 @@ impl PageGraph {
     }
 
     /// Get a collection of all Resource nodes whose requests match a set of adblock filter patterns.
-    /// Optionally, only match on exception patterns
-    pub fn resources_matching_filters(&self, patterns: Vec<String>, only_exceptions: bool) -> Vec<(NodeId, &Node)> {
+    pub fn resources_matching_filters(&self, graph: &PageGraph, patterns: Vec<String>) -> Vec<MatchedResource> {
         let source_url = self.root_url();
+
+        let mut matching_resources : Vec<MatchedResource> = vec![];
 
         let source_url = url::Url::parse(&source_url).expect("Could not parse source URL");
         let source_hostname = source_url.host_str().expect(&format!("Source URL has no host, {:?}", source_url));
         let source_domain = get_domain(source_hostname);
-        let blocker = Engine::from_rules(&patterns);
+        let blocker = Engine::from_rules_debug(&patterns);
 
-        self.nodes
-            .iter()
-            .filter(|(id, node)| match &node.node_type {
+        for (id, node) in self.nodes.iter() {
+            match &node.node_type {
                 NodeType::Resource { url } => {
                     let request_url = match url::Url::parse(url) {
                         Ok(request_url) => request_url,
-                        Err(_) => return false,
+                        Err(_) => continue,
                     };
                     let request_url_hostname = match request_url.host_str() {
                         Some(host) => host,
-                        None => return false,
+                        None => continue,
                     };
                     let request_url_domain = get_domain(request_url_hostname);
-
-                    let request_types = self.resource_request_types(id);
-
-                    request_types.iter().map(|(request_type, _size)|  {
+                    let request_types = self.resource_request_types(&id);
+                    request_types.into_iter().for_each(|(request_type, _size)| {
                         let third_party = if source_domain.is_empty() {
                             None
                         } else {
@@ -468,27 +482,40 @@ impl PageGraph {
                             .check_network_urls_with_hostnames_subset(url,
                                                                       request_url_hostname,
                                                                       source_hostname,
-                                                                      request_type,
+                                                                      &request_type,
                                                                       third_party,
                                                                       false,
                                                                       true);
-                        if only_exceptions {
-                            blocker_result.exception.is_some()
-                        } else {
-                            blocker_result.matched
-                        }
-                    }).any(|matched| matched)
-                }
-                _ => false
-            })
-            .map(|(id, node)| (id.clone(), node))
-            .collect()
-    }
+                        if blocker_result.matched || blocker_result.exception.is_some() {
+                            let matching_request_types = graph.resource_request_types(&id).into_iter().map(|(ty, _)| ty).collect();
+                            let requests = graph.incoming_edges(&node)
+                                .filter_map(|edge| {
+                                    if let EdgeType::RequestStart { request_id, .. } = &edge.edge_type {
+                                        Some(MatchedRequest {
+                                            request_id: * request_id,
+                                            edge_id: format!("{}", edge.id),
+                                            blocking_filter: blocker_result.filter.clone(),
+                                            exception_filter: blocker_result.exception.clone()
+                                        })
+                                    } else {
+                                        None
+                                    }
+                                }).collect::<Vec<_>>();
 
-    /// Get a collection of all Resource nodes whose requests match a given adblock filter pattern.
-    /// Optionally, only match on exception patterns
-    pub fn resources_matching_filter(&self, pattern: &str, only_exceptions: bool) -> Vec<(NodeId, &Node)> {
-        return self.resources_matching_filters(vec![pattern.to_string()], only_exceptions);
+                            let matched_resource = MatchedResource {
+                                url: url.clone(),
+                                node_id: format!("{}", id),
+                                request_types: matching_request_types,
+                                requests
+                            };
+                            matching_resources.push(matched_resource);
+                        }
+                    })
+                }
+                _ => continue
+            }
+        }
+        matching_resources
     }
 
     pub fn direct_downstream_effects_of(&self, edge: &Edge) -> Vec<&Edge>{
