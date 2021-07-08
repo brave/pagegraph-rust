@@ -39,13 +39,7 @@ fn main() {
                 .long("list")
                 .required_unless("filter_rule")
                 .help("Set path to filterlist file (newline-separated adblock rules) to use")
-                .takes_value(true))
-            .arg(Arg::with_name("match_only_exceptions")
-                .short("e")
-                .long("only-exceptions")
-                .help("Only match on exception rules")
-                .takes_value(false)
-                .required(false)))
+                .takes_value(true)))
         .subcommand(SubCommand::with_name("downstream_requests")
             .about("Find network requests initiated as a result of a given edge in the graph")
             .arg(Arg::with_name("requests")
@@ -141,7 +135,6 @@ fn main() {
     } else if let Some(matches) = matches.subcommand_matches("adblock_rules") {
         let rule = matches.value_of("filter_rule");
         let filterlist = matches.value_of("path_to_filterlist");
-        let only_exceptions = matches.is_present("match_only_exceptions");
         let filter_rules = if let Some(rule) = rule {
             vec![rule.to_string()]
         } else {
@@ -154,7 +147,7 @@ fn main() {
                 .collect();
             rules
         };
-        adblock_rules::main(&graph, filter_rules, only_exceptions);
+        adblock_rules::main(&graph, filter_rules);
     } else if let Some(matches) = matches.subcommand_matches("downstream_requests") {
         use std::convert::TryFrom;
         let just_requests = matches.is_present("requests");
