@@ -659,7 +659,7 @@ impl KeyedAttrs for types::NodeType {
             },
             "parser" => Self::Parser {},
             "Brave Shields" => Self::BraveShields {},
-            "ads shield" => Self::AdsShield {},
+            "shieldsAds shield" => Self::AdsShield {},
             "trackers shield" => Self::TrackersShield {},
             "javascript shield" => Self::JavascriptShield {},
             "fingerprinting shield" => Self::FingerprintingShield {},
