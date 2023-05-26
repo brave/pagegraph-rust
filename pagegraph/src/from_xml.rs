@@ -731,10 +731,12 @@ impl KeyedAttrs for types::EdgeType {
                 headers: drain_string!("headers"),
                 size: drain_string!("size"),
             },
-            "request start" => Self::RequestStart {
-                request_type: crate::types::RequestType::from(&drain_string!("request type")[..]),
+            "request start" => {
+                Self::RequestStart {
+                request_type: crate::types::RequestType::from(&drain_string!("resource type")[..]),
                 status: drain_string!("status"),
                 request_id: drain_usize!("request id"),
+                }
             },
             "request response" => Self::RequestResponse,
             "add event listener" => Self::AddEventListener {

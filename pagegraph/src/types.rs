@@ -75,6 +75,7 @@ impl From<&str> for RequestType {
         match v {
             "Image" => Self::Image,
             "ScriptClassic" => Self::ScriptClassic,
+            "Script" => Self::ScriptClassic,
             "CSS" => Self::CSS,
             "AJAX" => Self::AJAX,
             "Unknown" => Self::Unknown,
