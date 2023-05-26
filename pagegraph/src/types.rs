@@ -64,7 +64,7 @@ pub enum NodeType {
 #[derive(serde::Serialize)]
 pub enum RequestType {
     Image,
-    ScriptClassic,
+    Script,
     CSS,
     AJAX,
     Unknown,
@@ -74,8 +74,7 @@ impl From<&str> for RequestType {
     fn from(v: &str) -> Self {
         match v {
             "Image" => Self::Image,
-            "ScriptClassic" => Self::ScriptClassic,
-            "Script" => Self::ScriptClassic,
+            "Script" => Self::Script,
             "CSS" => Self::CSS,
             "AJAX" => Self::AJAX,
             "Unknown" => Self::Unknown,
@@ -88,7 +87,7 @@ impl RequestType {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Image => "image",
-            Self::ScriptClassic => "script",
+            Self::Script => "script",
             Self::CSS => "stylesheet",
             Self::AJAX => "xhr",
             Self::Unknown => "unknown",
