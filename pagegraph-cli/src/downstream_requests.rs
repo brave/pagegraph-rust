@@ -19,7 +19,7 @@ pub fn main(graph: &PageGraph, edge_id: EdgeId, just_requests: bool) {
             .into_iter()
             .for_each(|edge| {
                 if let EdgeType::RequestStart { request_id, request_type, .. } = &edge.edge_type {
-                    if let RequestType::ScriptClassic = request_type {
+                    if let RequestType::Script = request_type {
                         // we only want scripts!
                         request_ids.insert(&request_id);
                     }

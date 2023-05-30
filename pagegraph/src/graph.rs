@@ -29,7 +29,6 @@ pub struct PageGraph {
     pub nodes: HashMap<NodeId, Node>,
     pub graph: DiGraphMap<NodeId, Vec<EdgeId>>,
 
-    next_node_id: std::cell::RefCell<usize>,
     next_edge_id: std::cell::RefCell<usize>,
 }
 
@@ -41,7 +40,6 @@ impl PageGraph {
             nodes,
             graph,
             next_edge_id: std::cell::RefCell::new(usize::MAX),
-            next_node_id: std::cell::RefCell::new(usize::MAX),
         }
     }
 
