@@ -1,6 +1,7 @@
 use crate::graph::{PageGraph, Edge, EdgeId, Node, NodeId, FrameId, DownstreamRequests};
 use crate::types::{EdgeType, NodeType};
 
+use addr::parse_domain_name;
 use petgraph::Direction;
 use adblock::engine::Engine;
 
@@ -883,7 +884,6 @@ fn get_domain(host: &str) -> String {
         return host.to_string();
     }
     let source_hostname = host;
-    let source_domain = source_hostname.parse::<addr::DomainName>().expect("Source URL domain could not be parsed");
-    let source_domain = &source_hostname[source_hostname.len() - source_domain.root().to_str().len()..];
-    source_domain.to_string()
+    let source_domain = parse_domain_name(source_hostname).expect("Source URL domain could not be parsed");
+    source_domain.root().expect("Registrable domain not found").to_string()
 }
