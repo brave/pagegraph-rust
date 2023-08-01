@@ -1,6 +1,6 @@
 [package]
 name = "pagegraph"
-version = "0.1.0"
+version = "0.1.1"
 description = "Rust library for analyzing PageGraph files"
 license-file = "../LICENSE"
 authors = ["Anton Lazarev <alazarev@brave.com>"]
