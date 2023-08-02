@@ -458,7 +458,7 @@ impl PageGraph {
         let source_url = url::Url::parse(&source_url).expect("Could not parse source URL");
         let source_hostname = source_url.host_str().expect(&format!("Source URL has no host, {:?}", source_url));
         let source_domain = get_domain(source_hostname);
-        let blocker = Engine::from_rules_debug(&patterns);
+        let blocker = Engine::from_rules_debug(&patterns, Default::default());
 
         for (id, node) in self.nodes.iter() {
             match &node.node_type {
