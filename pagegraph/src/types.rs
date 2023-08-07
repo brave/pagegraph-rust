@@ -7,7 +7,7 @@ use crate::graph::FrameId;
 /// [same process](https://developer.chrome.com/blog/site-isolation/).
 /// This set of values are shared across HTML elements (e.g., `<a>`, `<img>`),
 /// text nodes, and white space nodes.
-type HtmlElementId = usize;
+pub type HtmlElementId = usize;
 
 /// ScriptId represents the unsigned integer identifier V8 uses
 /// for tracking each JavaScript code unit compiled and executed during
@@ -17,20 +17,20 @@ type HtmlElementId = usize;
 /// `src` property, or scripts otherwise passed to the JavaScript compiler
 /// (e.g., `eval`, strings provided as the first argument to `setInterval`,
 /// attributes like "onclick" defined in HTML elements, etc.).
-type ScriptId = usize;
+pub type ScriptId = usize;
 
 /// A string encoding a URL. May either be a full URL (protocol, host, port.
 /// path, etc.) or a relative one, depending on the context in the graph.
-type Url = String;
+pub type Url = String;
 
 /// A string encoding the name of an HTML tag (e.g., `"a"` for an anchor tag,
 /// or `"img"` for an image tag).
-type HtmlTag = String;
+pub type HtmlTag = String;
 
 /// A string encoding the name of an attribute on an HTML tag (e.g., `"href"`
 /// for the target of an anchor tag, or `"src"` for the source URL of the image
 /// presented in an image tag).
-type HtmlAttr = String;
+pub type HtmlAttr = String;
 
 /// Represents the type of any PageGraph node, along with any associated type-specific data.
 /// Nodes in PageGraph (mostly) represent either Actors (things that do things)
