@@ -1,13 +1,36 @@
 use crate::graph::FrameId;
 
-/// HtmlElementId represents the int identifier that Blink uses internally
-/// for each HTML element created during the execution of a Web page.
+/// HtmlElementId represents the unsigned integer identifier that Blink uses
+/// internally for each HTML element created during the execution of a Web page.
 /// Note that values are unique (and monotonically increasing) for all
 /// documents executing in the
 /// [same process](https://developer.chrome.com/blog/site-isolation/).
 /// This set of values are shared across HTML elements (e.g., `<a>`, `<img>`),
 /// text nodes, and white space nodes.
 type HtmlElementId = usize;
+
+/// ScriptId represents the unsigned integer identifier V8 uses
+/// for tracking each JavaScript code unit compiled and executed during
+/// the execution of a page. Note that values are monotonically increasing for
+/// all scripts executing, including scripts defined inline in `<script>`
+/// tags, "classic" and "module" scripts fetched via the `<script>` element's
+/// `src` property, or scripts otherwise passed to the JavaScript compiler
+/// (e.g., `eval`, strings provided as the first argument to `setInterval`,
+/// attributes like "onclick" defined in HTML elements, etc.).
+type ScriptId = usize;
+
+/// A string encoding a URL. May either be a full URL (protocol, host, port.
+/// path, etc.) or a relative one, depending on the context in the graph.
+type Url = String;
+
+/// A string encoding the name of an HTML tag (e.g., `"a"` for an anchor tag,
+/// or `"img"` for an image tag).
+type HtmlTag = String;
+
+/// A string encoding the name of an attribute on an HTML tag (e.g., `"href"`
+/// for the target of an anchor tag, or `"src"` for the source URL of the image
+/// presented in an image tag).
+type HtmlAttr = String;
 
 /// Represents the type of any PageGraph node, along with any associated type-specific data.
 /// Nodes in PageGraph (mostly) represent either Actors (things that do things)
@@ -64,7 +87,9 @@ pub enum NodeType {
         /// `window.performance.now()`.
         method: String
     },
-    JsBuiltin { method: String },
+    JsBuiltin {
+        method: String
+    },
     /// HTMLElement nodes represent the elements that make up the structure
     /// of a Web page. They map to things like `<a>`, `<img>`, `<div>`, etc.
     /// PageGraph creates one for each HTML element that exists at any point
@@ -75,7 +100,7 @@ pub enum NodeType {
         /// [`tagName`](https://developer.mozilla.org/en-US/docs/Web/API/Element/tagName)
         /// JavaScript attribute. For an image tag, this value will be "img",
         /// for a unordered list element this value will be "ul", etc.
-        tag_name: String,
+        tag_name: HtmlTag,
         /// Records whether the node is alive (and not garbage collected)
         /// at the point in time when the PageGraph document was serialized.
         is_deleted: bool,
@@ -122,13 +147,13 @@ pub enum NodeType {
         node_id: HtmlElementId,
     },
     DomRoot {
-        url: Option<String>,
-        tag_name: String,
+        url: Option<Url>,
+        tag_name: HtmlTag,
         is_deleted: bool,
         node_id: HtmlElementId,
     },
     FrameOwner {
-        tag_name: String,
+        tag_name: HtmlTag,
         is_deleted: bool,
         node_id: HtmlElementId,
     },
@@ -159,7 +184,7 @@ pub enum NodeType {
     ///   calling [`clear`](https://developer.mozilla.org/en-US/docs/Web/API/Storage/clear)
     ///   on the storage area.
     ///
-    /// The following edges record the results [JavaScript code](NodeType::Script)
+    /// The following edges record the results of [JavaScript code](NodeType::Script)
     /// receive when interacting with the storage area:
     /// - [`StorageReadResult`](EdgeType::StorageReadResult) records the
     ///   value returned to the script that read a value from the storage
@@ -192,26 +217,53 @@ pub enum NodeType {
     ///   calling [`clear`](https://developer.mozilla.org/en-US/docs/Web/API/Storage/clear)
     ///   on the storage area.
     ///
-    /// The following edges record the results [JavaScript code](NodeType::Script)
+    /// The following edges record the results of [JavaScript code](NodeType::Script)
     /// receive when interacting with the storage area:
     /// - [`StorageReadResult`](EdgeType::StorageReadResult) records the
     ///   value returned to the script that read a value from the storage
     ///   area.
     SessionStorage {},
+    /// Singleton node that represents the [`document.cookie`]()
+    /// property read from, and written to, during the execution of the Web
+    /// site. Note that this property *does not* encode cookies set or
+    /// read through HTTP headers, only cookie activities from scripts.
+    ///
+    /// The following edges record [JavaScript code](NodeType::Script)
+    /// reading and writing cookies during page execution:
+    /// - [`StorageSet`](EdgeType::StorageSet): records when a script writes
+    ///   assigns a value to the `document.cookie` property. Note though that
+    ///   because of the how the JavaScript cookie API works, assigning a
+    ///   value to the `document.cookie` property might actually delete
+    ///   or modify a cookie in the site's cookie jar.
+    /// - [`ReadStorageCall`](EdgeType::ReadStorageCall) records when a script
+    ///   is reading the value of `document.cookie`.
+    ///
+    /// The following edges record value returned to [JavaScript code](NodeType::Script)
+    /// reading the state of the `document.cookie` property.
+    /// - [`StorageReadResult`](EdgeType::StorageReadResult) records the
+    ///   value returned to the script that read the value of `document.cookie`.
     CookieJar {},
+    /// Script nodes represent JavaScript code units compiled by V8
+    /// and executed during the lifetime of the page. Script nodes
+    /// encode any kind of script that can run during the page's execution
+    /// (e.g., fetched or inlined "classic" scripts or module scripts,
+    /// or eval'ed scripts).
     Script {
-        url: Option<String>,
+        /// The URL this script was fetched from, in the case that the script
+        /// was fetched from a URL via a `<script>` element's `src` attribute,
+        /// or a dynamically fetched module script.
+        url: Option<Url>,
+        /// The type of script being executed, either a "module" script
+        /// or a "classic" script.
         script_type: String,
-        script_id: usize,
+        /// The V8 identifier for this JavaScript code unit.
+        script_id: ScriptId,
+        /// The text of the script as passed to the v8 compiler.
         source: String,
     },
+    /// Singleton node representing Blink parser, responsible for parsing
+    /// HTML text and generating page elements.
     Parser {},
-    BraveShields {},
-    AdsShield {},
-    TrackersShield {},
-    JavascriptShield {},
-    FingerprintingShield {},
-    FingerprintingV2Shield {},
     Binding {
         binding: String,
         binding_type: String,
@@ -219,14 +271,22 @@ pub enum NodeType {
     BindingEvent {
         binding_event: String,
     },
-    Extensions {},
     RemoteFrame {
         frame_id: FrameId,
     },
-    AdFilter { rule: String },
+    AdFilter {
+        rule: String
+    },
     TrackerFilter,  // TODO
     FingerprintingFilter,   // TODO
     Storage {},
+    BraveShields {},
+    AdsShield {},
+    TrackersShield {},
+    JavascriptShield {},
+    FingerprintingShield {},
+    FingerprintingV2Shield {},
+    Extensions {},
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -265,25 +325,105 @@ impl RequestType {
 }
 
 /// Represents the type of any PageGraph edge, along with any associated type-specific data.
+/// Edges in PageGraph represent actions taken by some actor in the
+/// page (e.g., a JavaScript code unit), being performed on some other element
+/// in the page (e.g., a resource being fetched). Edges are outgoing from
+/// the actor, and incoming to the actee.
 #[derive(Clone, PartialEq, Debug)]
 #[derive(serde::Serialize)]
 pub enum EdgeType {
-    Filter {},
-    Structure {},
     CrossDom {},
-    ResourceBlock {},
-    Shield {},
     TextChange {},
+    /// `RemoveNode` edges encode a HTML element being removed from the DOM
+    /// tree.
+    ///
+    /// The actor node will be the [`Script`](NodeType::Script) node
+    /// that is removing a HTML element from the document.
+    ///
+    /// The actee node will be the `HtmlElement`](NodeType::HtmlElement) node
+    /// being removed from the document.
     RemoveNode {},
+    /// `DeleteNode` edges encode a HTML element being deleted by JavaScript
+    /// code. Note that this is a distinct action from merely removing an
+    /// HTML element from a document (which is encoded with a
+    /// [`RemoveNode`](EdgeType::RemoveNode) edge).
+    ///
+    /// The actor node will be the [`Script`](NodeType::Script) node
+    /// that is delete a HTML element.
+    ///
+    /// The actee node will be the `HtmlElement`](NodeType::HtmlElement) node
+    /// being deleted.
     DeleteNode {},
+    /// `InsertNode` edges encode a HTML element being inserted into a DOM
+    /// tree.
+    ///
+    /// The actor node will either be the [`Parser`](NodeType::Parser)
+    /// (indicating that the element was inserted into the document because
+    /// of text being parsed, most often from the initial HTML document)
+    /// or a [`Script`](NodeType::Script) node (indicating that the element
+    /// was inserted into the document dynamically).
+    ///
+    /// The actee node will be a [`HtmlElement`](NodeType::HtmlElement) node
+    /// depicting the HTML element being inserted into the document.
     InsertNode {
-        parent: usize,
-        before: Option<usize>,
+        /// The identifier of the DOM element the actee
+        /// [`HtmlElement`](NodeType::HtmlElement) node is being inserted
+        /// beneath in the document.
+        parent: HtmlElementId,
+        /// The identifier of the prior sibling DOM element the actee
+        /// [`HtmlElement`](NodeType::HtmlElement) node is being inserted
+        /// before in the document. If this value is not present, it indicates
+        /// that the actee node was the first child of the parent node at
+        /// insertion time,
+        before: Option<HtmlElementId>,
     },
+    /// `CreateNode` edges encode that an HTML element that was created during
+    /// the execution of the page.
+    ///
+    /// The actor node will either be the [`Parser`](NodeType::Parser)
+    /// (indicating that the element was created because it was defined in
+    /// text parsed by the blink parser) or a [`Script`](NodeType::Script) node
+    /// (indicating that the element was dynamically created by a JavaScript
+    /// code unit (e.g., `document.createElement`).
+    ///
+    /// The actee node will be a [`HtmlElement`](NodeType::HtmlElement) node
+    /// depicting the HTML element that was created.
     CreateNode {},
-    JsResult { value: Option<String> },
+    /// `JsResult` edges encode a value being returned from a property read
+    /// or a function call in JavaScript code.
+    ///
+    /// The actor node will be either a [`WebApi`](NodeType::WebApi) node
+    /// (representing the WebAPI method or property that was called) or
+    /// a [`JsBuiltin`](NodeType::JsBuiltin) node (representing
+    /// an instrumented method or function thats defined as part of
+    /// ECMAScript).
+    ///
+    /// The actee node will be a [`Script`](NodeType::Script) node
+    /// representing the JavaScript code unit that the value is being
+    /// returned to.
+    JsResult {
+        /// The value being returned from an API to a JavaScript code unit.
+        /// Note that this will not be present for APIs that do not return
+        /// a value when called, such as `addEventListener`).
+        value: Option<String>
+    },
+    /// `JsCall` edges encode a JavaScript function/method being called
+    /// by JavaScript code.
+    ///
+    /// The actor node will be [`Script`](NodeType::Script) node, representing
+    /// the JavaScript code unit calling the property, function, or method.
+    ///
+    /// The actee node will be either a [`WebApi`](NodeType::WebApi) node
+    /// (representing the WebAPI method or property being called) or
+    /// a [`JsBuiltin`](NodeType::JsBuiltin) node (representing
+    /// an instrumented method or function thats defined as part of
+    /// ECMAScript being called).
     JsCall {
+        /// An serialized version of any arguments provided when the method or
+        /// function being called (if any).
         args: Option<String>,
+        /// The character offset in the JavaScript text where this JavaScript
+        /// call occurred.
         script_position: usize,
     },
     RequestComplete {
@@ -311,12 +451,12 @@ pub enum EdgeType {
     AddEventListener {
         key: String,
         event_listener_id: usize,
-        script_id: usize,
+        script_id: ScriptId,
     },
     RemoveEventListener {
         key: String,
         event_listener_id: usize,
-        script_id: usize,
+        script_id: ScriptId,
     },
     EventListener {
         key: String,
@@ -330,23 +470,60 @@ pub enum EdgeType {
         key: String,
         value: Option<String>,
     },
-    DeleteStorage { key: String },
-    ReadStorageCall { key: String },
-    ClearStorage { key: String },
-    StorageBucket {},
-    ExecuteFromAttribute { attr_name: String },
+    DeleteStorage {
+        key: String
+    },
+    ReadStorageCall {
+        key: String
+    },
+    ClearStorage {
+        key: String
+    },
+    ExecuteFromAttribute {
+        attr_name: HtmlAttr
+    },
     Execute {},
+    /// `SetAttribute` edges encode JavaScript code setting an attribute
+    /// on a HTML element.
+    ///
+    /// The actor node will be [`Script`](NodeType::Script) node, representing
+    /// the JavaScript code setting the attribute.
+    ///
+    /// The actee node will be a [`HtmlElement`](NodeType::HtmlElement) node,
+    /// representing the HTML element that is having an attribute set on it.
     SetAttribute {
-        key: String,
+        /// The name of the HTML attribute being set (e.g., `height`,
+        /// `href`, `src`).
+        key: HtmlAttr,
+        /// The value being assigned to the HTML attribute (if any).
         value: Option<String>,
+        /// If the attribute being set is part of the the element's
+        /// CSS style definition.
         is_style: bool,
     },
+    /// `DeleteAttribute` edges encode JavaScript code deleting an attribute
+    /// from a HTML element.
+    ///
+    /// The actor node will be [`Script`](NodeType::Script) node, representing
+    /// the JavaScript code deleting the attribute.
+    ///
+    /// The actee node will be a [`HtmlElement`](NodeType::HtmlElement) node,
+    /// representing the HTML element that is having the attribute deleted.
     DeleteAttribute {
-        key: String,
+        /// The name of the HTML attribute being deleted (e.g., `height`,
+        /// `href`, `src`).
+        key: HtmlAttr,
+        /// If the attribute being deleted is part of the the element's
+        /// CSS style definition.
         is_style: bool,
     },
     Binding {},
     BindingEvent {
         script_position: usize,
     },
+    Filter {},
+    Structure {},
+    Shield {},
+    ResourceBlock {},
+    StorageBucket {},
 }
