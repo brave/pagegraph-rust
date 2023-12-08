@@ -8,7 +8,7 @@ edition = "2018"
 readme = "../README.md"
 
 [dependencies]
-xml-rs = "^ 0.8"
+xml-rs = "^0.8.19"
 petgraph = "^0.6.4"
 adblock = "^ 0.7"
 url = "^ 2.1"
