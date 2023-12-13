@@ -10,7 +10,7 @@ readme = "../README.md"
 [dependencies]
 xml-rs = "^0.8.19"
 petgraph = "^0.6.4"
-adblock = "^0.8"
+adblock = "^0.8.5"
 serde = { version = "^1.0.193", features = ["derive"], optional = true }
 
 [features]
