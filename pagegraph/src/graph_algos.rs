@@ -1,9 +1,8 @@
 use crate::graph::{PageGraph, Edge, EdgeId, Node, NodeId, FrameId, DownstreamRequests};
 use crate::types::{EdgeType, NodeType};
 
-use addr::parse_domain_name;
 use petgraph::Direction;
-use adblock::engine::Engine;
+use adblock::{Engine, request::Request};
 
 const CAN_HAVE_SRC: [&str; 9] = ["audio", "embed", "iframe", "img", "input", "script", "source", "track", "video"];
 
@@ -455,38 +454,19 @@ impl PageGraph {
 
         let mut matching_resources : Vec<MatchedResource> = vec![];
 
-        let source_url = url::Url::parse(&source_url).expect("Could not parse source URL");
-        let source_hostname = source_url.host_str().expect(&format!("Source URL has no host, {:?}", source_url));
-        let source_domain = get_domain(source_hostname);
         let blocker = Engine::from_rules_debug(&patterns, Default::default());
 
         for (id, node) in self.nodes.iter() {
             match &node.node_type {
                 NodeType::Resource { url } => {
-                    let request_url = match url::Url::parse(url) {
-                        Ok(request_url) => request_url,
-                        Err(_) => continue,
-                    };
-                    let request_url_hostname = match request_url.host_str() {
-                        Some(host) => host,
-                        None => continue,
-                    };
-                    let request_url_domain = get_domain(request_url_hostname);
                     let request_types = self.resource_request_types(&id);
-                    request_types.into_iter().for_each(|(request_type, _size)| {
-                        let third_party = if source_domain.is_empty() {
-                            None
-                        } else {
-                            Some(source_domain != request_url_domain)
+                    for (request_type, _size) in request_types.into_iter() {
+                        let adblock_request = match Request::new(&url, &source_url, &request_type) {
+                            Ok(r) => r,
+                            Err(_) => continue,
                         };
                         let blocker_result = blocker
-                            .check_network_urls_with_hostnames_subset(url,
-                                                                      request_url_hostname,
-                                                                      source_hostname,
-                                                                      &request_type,
-                                                                      third_party,
-                                                                      false,
-                                                                      true);
+                            .check_network_request_subset(&adblock_request, false, true);
                         if blocker_result.matched || blocker_result.exception.is_some() {
                             let matching_request_types = graph.resource_request_types(&id).into_iter().map(|(ty, _)| ty).collect();
                             let requests = graph.incoming_edges(&node)
@@ -511,7 +491,7 @@ impl PageGraph {
                             };
                             matching_resources.push(matched_resource);
                         }
-                    })
+                    }
                 }
                 _ => continue
             }
@@ -877,13 +857,4 @@ impl PageGraph {
         }
         answer
     }
-}
-
-fn get_domain(host: &str) -> String {
-    if let "localhost" = host {
-        return host.to_string();
-    }
-    let source_hostname = host;
-    let source_domain = parse_domain_name(source_hostname).expect("Source URL domain could not be parsed");
-    source_domain.root().expect("Registrable domain not found").to_string()
 }
