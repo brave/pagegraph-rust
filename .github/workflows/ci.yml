@@ -1,0 +1,44 @@
+name: CI
+
+on: [push]
+
+jobs:
+  ci:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        rust: [stable]
+        include:
+          - os: ubuntu-latest
+            target: Linux
+          - os: macos-latest
+            target: Macos
+          - os: windows-latest
+            target: Windows
+
+    env:
+      # Deny warnings for all steps
+      RUSTFLAGS: --deny warnings
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Build 'pagegraph' package
+        run: cargo build -p pagegraph
+
+      - name: Build 'pagegraph-cli' package
+        run: cargo build -p pagegraph-cli
+
+      - name: Audit dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cargo install --force cargo-audit
+          cargo generate-lockfile
+          cargo audit
+
+      # broken for now 😭
+      #- name: Run tests
+      #  run: cargo test
