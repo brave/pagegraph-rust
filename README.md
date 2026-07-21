@@ -1,5 +1,9 @@
 # pagegraph
 
+**This repo is deprecated, please see https://github.com/brave-experiments/pagegraph-query instead.**
+
+---
+
 This crate provides utilities for analyzing PageGraph outputs.
 
 ## Workspace organization
