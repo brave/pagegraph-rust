@@ -6,7 +6,7 @@ This crate provides utilities for analyzing PageGraph outputs.
 
 `pagegraph` provides a core library for interacting directly with pagegraph files and building custom extraction tools.
 
-`pagegraph-cli` provides a more convenient, no-code wrapper around common operations, supplying outputs in easily-parseable formats.
+**(DEPRECATED, use [pagegraph-query](https://github.com/brave-experiments/pagegraph-query) instead)** `pagegraph-cli` provides a more convenient, no-code wrapper around common operations, supplying outputs in easily-parseable formats.
 
 ## Example
 
